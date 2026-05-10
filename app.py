@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+import stripe
 from flask import Flask, render_template, request, jsonify, send_file, g
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -42,6 +43,10 @@ limiter = Limiter(
 )
 
 API_KEY = os.environ.get("ANALYZER_API_KEY", "")
+STRIPE_SECRET = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+PRICE_USD = 12  # Precio one-shot del plan PRO
+stripe.api_key = STRIPE_SECRET
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,6 +77,10 @@ def check_auth():
     if request.path == "/" or request.path == "/api/health":
         return None
     if request.path in ("/api/auth/register", "/api/auth/login"):
+        return None
+    if request.path.startswith("/api/stripe"):
+        return None
+    if request.path == "/checkout-success":
         return None
 
     # API key global (modo admin/dev)
@@ -197,18 +206,68 @@ def api_me():
 
 
 # =============================================================================
-# Upgrade (simulado — sin Stripe real)
+# Upgrade (Stripe Checkout)
 # =============================================================================
 
 
-@app.route("/api/upgrade", methods=["POST"])
-def api_upgrade():
-    """Simula upgrade a plan pago. En producción: Stripe Checkout Session."""
+@app.route("/api/create-checkout-session", methods=["POST"])
+def api_create_checkout():
     if not g.current_user:
         return jsonify({"error": "Debés iniciar sesión primero"}), 401
-    upgrade_to_paid(g.current_user["id"])
-    track_event("user_upgraded", g.current_user["id"])
-    return jsonify({"tier": "paid", "message": "Plan actualizado a pago"})
+    if not STRIPE_SECRET:
+        return jsonify({"error": "Stripe no está configurado"}), 500
+
+    try:
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "unit_amount": PRICE_USD * 100,  # centavos
+                    "product_data": {"name": "Web Analyzer PRO — Acceso Vitalicio"},
+                },
+                "quantity": 1,
+            }],
+            metadata={"user_id": str(g.current_user["id"])},
+            success_url=request.host_url.rstrip("/") + "/checkout-success?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url=request.host_url.rstrip("/") + "/",
+        )
+        return jsonify({"url": session.url})
+    except Exception as e:
+        log.exception("Error creando sesión Stripe")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/stripe-webhook", methods=["POST"])
+def api_stripe_webhook():
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get("Stripe-Signature", "")
+
+    if not STRIPE_WEBHOOK_SECRET:
+        log.warning("STRIPE_WEBHOOK_SECRET no configurada — webhook ignorado")
+        return jsonify({"error": "Webhook no configurado"}), 400
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except (ValueError, stripe.error.SignatureVerificationError) as e:
+        log.warning(f"Webhook inválido: {e}")
+        return jsonify({"error": "Firma inválida"}), 400
+
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        user_id = session.get("metadata", {}).get("user_id")
+        if user_id:
+            upgrade_to_paid(int(user_id))
+            track_event("user_upgraded", int(user_id))
+            log.info(f"Usuario {user_id} actualizado a pago vía Stripe")
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/checkout-success")
+def checkout_success():
+    session_id = request.args.get("session_id", "")
+    return render_template("checkout-success.html", session_id=session_id)
 
 
 # =============================================================================

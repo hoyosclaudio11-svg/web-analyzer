@@ -270,13 +270,14 @@ async function upgrade() {
     return;
   }
   try {
-    const resp = await fetch(UPGRADE, { method: 'POST', headers: apiHeaders() });
+    const resp = await fetch('/api/create-checkout-session', { method: 'POST', headers: apiHeaders() });
     const data = await resp.json();
-    if (!resp.ok) { alert(data.error || 'Error al actualizar plan'); return; }
-    currentUser.tier = 'paid';
-    updateAuthUI();
-    $('#status-text').textContent = 'Plan actualizado a PRO';
-    alert('Ahora tenés el plan PRO. Podés descargar todas las soluciones.');
+    if (!resp.ok) { alert(data.error || 'Error al crear sesión de pago'); return; }
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      alert('No se pudo iniciar el checkout. Reintentá.');
+    }
   } catch (err) {
     alert('Error de conexión');
   }
