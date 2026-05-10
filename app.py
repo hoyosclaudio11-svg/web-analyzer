@@ -12,7 +12,10 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-import stripe
+try:
+    import stripe as _stripe
+except ImportError:
+    _stripe = None
 from flask import Flask, render_template, request, jsonify, send_file, g
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -46,7 +49,8 @@ API_KEY = os.environ.get("ANALYZER_API_KEY", "")
 STRIPE_SECRET = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 PRICE_USD = 12  # Precio one-shot del plan PRO
-stripe.api_key = STRIPE_SECRET
+if _stripe and STRIPE_SECRET:
+    _stripe.api_key = STRIPE_SECRET
 
 logging.basicConfig(
     level=logging.INFO,
@@ -214,11 +218,11 @@ def api_me():
 def api_create_checkout():
     if not g.current_user:
         return jsonify({"error": "Debés iniciar sesión primero"}), 401
-    if not STRIPE_SECRET:
+    if not _stripe or not STRIPE_SECRET:
         return jsonify({"error": "Stripe no está configurado"}), 500
 
     try:
-        session = stripe.checkout.Session.create(
+        session = _stripe.checkout.Session.create(
             mode="payment",
             line_items=[{
                 "price_data": {
@@ -248,8 +252,8 @@ def api_stripe_webhook():
         return jsonify({"error": "Webhook no configurado"}), 400
 
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-    except (ValueError, stripe.error.SignatureVerificationError) as e:
+        event = _stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except (ValueError, _stripe.error.SignatureVerificationError) as e:
         log.warning(f"Webhook inválido: {e}")
         return jsonify({"error": "Firma inválida"}), 400
 
