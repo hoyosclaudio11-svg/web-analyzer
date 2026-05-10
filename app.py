@@ -483,7 +483,7 @@ def _color(score):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5100))
-    host = os.environ.get("HOST", "127.0.0.1")
+    host = os.environ.get("HOST", "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
 
     if not API_KEY:
         log.warning("ANALYZER_API_KEY no configurada — la API opera sin autenticación")
