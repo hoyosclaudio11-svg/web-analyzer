@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta property="og:title" content="Scorecard: {{ report.url }} — {{ report.promedio }}/10">
+<meta property="og:description" content="Análisis de Rendimiento, Accesibilidad, SEO, UX y Conversión generado por Web Analyzer & Optimizer.">
+<meta property="og:type" content="website">
+<title>Scorecard — {{ report.url }} — {{ report.promedio }}/10</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { background: #0a0f1e; color: #e0e0e0; font-family: Arial, sans-serif; padding: 24px; max-width: 680px; margin: 0 auto; }
+  .report-header { text-align: center; margin-bottom: 32px; }
+  .report-header h1 { color: #fff; font-size: 22px; margin-bottom: 6px; }
+  .report-header .url { color: #58a6ff; font-size: 14px; }
+  .score-card { background: #111; border-radius: 10px; padding: 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .score-card .cat { font-weight: bold; }
+  .score-card .detalles { font-size: 11px; color: #888; margin-top: 4px; }
+  .promedio-box { text-align: center; margin: 24px 0; }
+  .promedio-box .big-score { font-size: 48px; font-weight: bold; }
+  .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #555; }
+  .footer a { color: #58a6ff; }
+  .verde { color: #2ea043; }
+  .amarillo { color: #d29922; }
+  .rojo { color: #e63946; }
+</style>
+</head>
+<body>
+<div class="report-header">
+  <h1>Scorecard de Análisis</h1>
+  <div class="url">{{ report.url }}</div>
+</div>
+
+<div class="promedio-box">
+  <div class="big-score {{ 'verde' if report.promedio >= 8 else 'amarillo' if report.promedio >= 5 else 'rojo' }}">
+    {{ report.promedio }}/10
+  </div>
+  <div style="font-size:13px;color:#888">{{ report.created_at }}</div>
+</div>
+
+{% for cat, info in report.scorecard.items() %}
+<div class="score-card">
+  <div>
+    <div class="cat">{{ cat }}</div>
+    {% for d in info.get("detalles", []) %}
+    <div class="detalles">— {{ d }}</div>
+    {% endfor %}
+  </div>
+  <div style="font-size:22px;font-weight:bold" class="{{ info.color }}">{{ info.puntaje }}/10</div>
+</div>
+{% endfor %}
+
+<div class="footer">
+  Generado por <a href="/">Web Analyzer &amp; Optimizer</a> &middot; {{ report.views }} vistas
+</div>
+</body>
+</html>

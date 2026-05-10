@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FAQ — Web Analyzer & Optimizer</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { background: #0a0f1e; color: #e0e0e0; font-family: Arial, sans-serif; }
+  .page { max-width: 780px; margin: 0 auto; padding: 40px 24px 80px; }
+  .page h1 { font-size: 28px; color: #fff; margin-bottom: 8px; }
+  .page .sub { color: #8b949e; margin-bottom: 40px; font-size: 14px; }
+  .faq-item { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px 24px; margin-bottom: 12px; }
+  .faq-item h3 { color: #58a6ff; font-size: 16px; margin: 0 0 8px; }
+  .faq-item p { color: #8b949e; font-size: 13px; line-height: 1.6; margin: 0; }
+  .faq-item p code { background: #21262d; padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+  .back-link { display: inline-block; margin-top: 32px; color: #58a6ff; text-decoration: none; font-size: 14px; }
+  .back-link:hover { text-decoration: underline; }
+  .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 1px solid #30363d; margin-bottom: 40px; }
+  .header-title { font-size: 22px; font-weight: 700; color: #fff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="header">
+    <a href="/" class="header-title">Web<span style="color:#58a6ff">Analyzer</span> <span style="font-size:11px;color:#6e7681;text-transform:uppercase;letter-spacing:1px">&amp; Optimizer</span></a>
+    <a href="/" style="color:#58a6ff;font-size:13px;text-decoration:none">← Volver</a>
+  </header>
+
+  <h1>Preguntas frecuentes</h1>
+  <p class="sub">Todo lo que necesitás saber sobre Web Analyzer &amp; Optimizer.</p>
+
+  <div class="faq-item">
+    <h3>¿Qué hace exactamente el plugin?</h3>
+    <p>El plugin aplica correcciones automáticas en tu sitio WordPress: agrega meta tags (OG, description, canonical), lazy loading a imágenes, alt text faltante, atributos defer/async a scripts bloqueantes, shortcodes para newsletter y CTAs, y formularios de captura de email. Todo sin que edites código.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Cómo instalo el plugin en WordPress?</h3>
+    <p>WordPress Admin → <strong>Plugins</strong> → <strong>Añadir nuevo</strong> → <strong>Subir plugin</strong> → seleccioná el archivo <code>.zip</code> que descargaste → <strong>Instalar ahora</strong> → <strong>Activar</strong>. Listo, las correcciones se aplican solas.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿El plugin modifica el contenido de mis entradas o páginas?</h3>
+    <p><strong>No.</strong> El plugin trabaja a nivel técnico (meta tags, scripts, lazy loading, formularios). No edita ni borra ninguna entrada, página, imagen o configuración de WordPress. Tu contenido queda exactamente como está.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Qué hago si el plugin causa un error?</h3>
+    <p>Todos los plugins de Web Analyzer incluyen un mecanismo de seguridad: si el plugin detecta un entorno incompatible, se desactiva solo y muestra un aviso en el admin. Si igual necesitás desactivarlo manualmente, entrá por FTP a <code>/wp-content/plugins/</code> y renombrá la carpeta del plugin. También podés <a href="mailto:soporte@delmonteanalitica.com" style="color:#58a6ff">escribirnos a soporte</a>.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Con qué versión de WordPress y PHP funciona?</h3>
+    <p>WordPress 5.0 o superior y PHP 7.4 o superior. Compatible con la gran mayoría de themes del repositorio oficial y themes populares como Astra, GeneratePress, Divi, OceanWP, Hello Elementor y Kadence.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Puedo usar el plugin en más de un sitio?</h3>
+    <p>El plugin se genera a medida para la URL que analizaste. Si querés optimizar otro sitio, analizalo por separado y descargá su plugin específico. <strong>Cada análisis genera un plugin único adaptado a ese sitio.</strong></p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Qué pasa si ya tengo otro plugin de SEO (Yoast, RankMath, etc.)?</h3>
+    <p>El plugin de Web Analyzer está diseñado para convivir con plugins de SEO populares. No reemplaza sus funciones: agrega las correcciones que esos plugins no cubren (lazy loading, formularios, CTAs). Si hay conflicto con algún meta tag, el plugin detecta si ya existe y no lo duplica.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Cuánto tarda en verse la mejora después de instalar el plugin?</h3>
+    <p>Las correcciones técnicas (meta tags, lazy loading, scripts) son <strong>inmediatas</strong>. El impacto en buscadores depende de cuándo Google re-indexe tu sitio, lo cual suele tomar entre 2 y 7 días. Volvé a analizar tu URL en 48-72 horas para verificar la mejora.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Qué incluye el plan gratuito y qué el plan PRO?</h3>
+    <p><strong>Gratis:</strong> análisis completo con scorecard, hallazgos, recomendaciones y guía en markdown. <strong>PRO (USD 12):</strong> todo lo anterior + descarga del plugin WordPress (.zip), archivos HTML corregidos y reporte JSON completo.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Cómo comparto los resultados del análisis?</h3>
+    <p>Cada análisis genera un <strong>link público</strong> que aparece debajo del scorecard. Copialo y compartilo: muestra el puntaje general y por categoría, sin necesidad de que la otra persona tenga cuenta.</p>
+  </div>
+
+  <a href="/" class="back-link">← Volver al analizador</a>
+
+</div>
+</body>
+</html>

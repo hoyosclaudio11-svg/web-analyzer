@@ -1,0 +1,9 @@
+data/
+output/
+analisis/
+__pycache__/
+*.pyc
+.pytest_cache/
+analyzer.log
+.env
+.venv/

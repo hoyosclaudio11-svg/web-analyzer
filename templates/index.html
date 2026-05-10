@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="api-key" content="{{ api_key }}">
+<title>Web Analyzer & Optimizer</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <span class="header-title">Web<span style="color:var(--blue)">Analyzer</span></span>
+      <span class="header-subtitle">&amp; Optimizer</span>
+    </div>
+    <div class="header-right">
+      <span id="user-tier" class="user-tier" style="display:none"></span>
+      <a id="btn-login" class="btn-auth" href="#" style="display:none">Ingresar</a>
+      <a id="btn-register" class="btn-auth-outline" href="#" style="display:none">Crear cuenta</a>
+      <a id="btn-logout" class="btn-auth" href="#" style="display:none">Salir</a>
+      <span id="status-text" class="status-text">Listo</span>
+    </div>
+  </header>
+
+  <!-- AUTH MODAL -->
+  <div id="auth-modal" class="modal" style="display:none">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <span class="modal-close" id="modal-close">&times;</span>
+      <div id="auth-login">
+        <h3 style="margin:0 0 16px;color:#fff">Ingresar</h3>
+        <form id="login-form">
+          <input type="email" id="login-email" placeholder="Email" required style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
+          <input type="password" id="login-pass" placeholder="Contraseña" required minlength="6" style="width:100%;padding:10px;margin-bottom:12px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
+          <button type="submit" class="btn-analyze" style="width:100%">Ingresar</button>
+        </form>
+        <p style="font-size:12px;color:#888;margin-top:12px;text-align:center">¿No tenés cuenta? <a href="#" id="switch-to-register" style="color:#58a6ff">Crear una</a></p>
+      </div>
+      <div id="auth-register" style="display:none">
+        <h3 style="margin:0 0 16px;color:#fff">Crear cuenta</h3>
+        <form id="register-form">
+          <input type="email" id="reg-email" placeholder="Email" required style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
+          <input type="password" id="reg-pass" placeholder="Contraseña (mín 6 caracteres)" required minlength="6" style="width:100%;padding:10px;margin-bottom:12px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
+          <button type="submit" class="btn-analyze" style="width:100%">Crear cuenta</button>
+        </form>
+        <p style="font-size:12px;color:#888;margin-top:12px;text-align:center">¿Ya tenés cuenta? <a href="#" id="switch-to-login" style="color:#58a6ff">Ingresar</a></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPGRADE BANNER (free users) -->
+  <div id="upgrade-banner" class="upgrade-banner" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <span><strong>Plan gratuito</strong> — Las descargas están bloqueadas. Desbloquealas por <strong>USD 12</strong>.</span>
+      <button id="btn-upgrade" class="btn-upgrade">Desbloquear ahora</button>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <section class="hero-section">
+    <h1 class="hero-title">Analizá, <span style="color:var(--blue)">corregí</span> y despegá</h1>
+    <p class="hero-desc">Pegá la URL de cualquier sitio público. En segundos tenés una auditoría completa en 5 categorías con puntaje, hallazgos críticos, recomendaciones y un plugin descargable que aplica las correcciones automáticamente.</p>
+    <div class="hero-links">
+      <a href="/features">Qué hace →</a>
+      <a href="/faq">FAQ →</a>
+    </div>
+    <div class="hero-stats" id="hero-stats" style="display:none">
+      <span><strong id="stat-analyses">0</strong> sitios analizados</span>
+      <span><strong id="stat-downloads">0</strong> plugins descargados</span>
+    </div>
+  </section>
+
+  <!-- INPUT -->
+  <section class="input-section">
+    <form id="analyze-form" class="analyze-form">
+      <div class="url-input-wrap">
+        <span class="url-prefix"></span>
+        <input type="text" id="url-input" class="url-input"
+               placeholder="ej: www.riverplate-info.com.ar"
+               autocomplete="off" spellcheck="false">
+      </div>
+      <button type="submit" id="btn-analyze" class="btn-analyze">
+        Analizar
+      </button>
+    </form>
+    <p id="input-hint" class="input-hint">Ingresá una URL pública para analizar en 5 categorías: Rendimiento, Accesibilidad, SEO, UX y Conversión.</p>
+  </section>
+
+  <!-- LOADING -->
+  <div id="loading" class="loading" style="display:none">
+    <div class="spinner"></div>
+    <span>Analizando...</span>
+  </div>
+
+  <!-- ERROR -->
+  <div id="error-box" class="error-box" style="display:none"></div>
+
+  <!-- RESULTADOS -->
+  <div id="results" style="display:none">
+
+    <!-- Scorecard -->
+    <section class="scorecard-section">
+      <h2 class="section-title">Scorecard</h2>
+      <div class="scorecard-grid" id="scorecard-grid"></div>
+      <div class="scorecard-promedio" id="scorecard-promedio"></div>
+    </section>
+
+    <!-- Tecnología detectada -->
+    <div class="tech-bar" id="tech-bar"></div>
+
+    <!-- Grid: Hallazgos + Recomendaciones -->
+    <div class="results-grid">
+      <section class="card">
+        <div class="card-header"><span>Hallazgos críticos</span></div>
+        <div id="hallazgos-body" class="card-body">
+          <p class="empty-text">Sin hallazgos.</p>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-header"><span>Recomendaciones</span></div>
+        <div id="recomendaciones-body" class="card-body">
+          <p class="empty-text">Sin recomendaciones.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- Próximos pasos -->
+    <section class="card next-steps-card" id="next-steps-card">
+      <div class="card-header"><span>🚀 Próximos pasos — qué hacer ahora</span></div>
+      <div id="next-steps-body" class="card-body">
+        <p class="empty-text">Realizá un análisis para ver los pasos a seguir.</p>
+      </div>
+    </section>
+
+    <!-- Soluciones descargables -->
+    <section class="card soluciones-card">
+      <div class="card-header"><span>📦 Soluciones descargables — listas para aplicar</span></div>
+      <div id="soluciones-body" class="card-body soluciones-grid">
+        <p class="empty-text">Sin soluciones generadas.</p>
+      </div>
+    </section>
+
+    <!-- Aclaración -->
+    <section class="card" style="border:1px solid rgba(88,166,255,0.3);margin-bottom:24px">
+      <div class="card-body" style="font-size:13px;color:var(--text2);display:flex;align-items:flex-start;gap:10px">
+        <span style="font-size:18px">💡</span>
+        <span><strong>¿Qué hace y qué no hace el plugin?</strong><br>
+        El plugin corrige <strong>automáticamente</strong> problemas técnicos: SEO, meta tags, rendimiento, lazy loading, formularios y CTAs. <strong>No edita el contenido</strong> de las entradas ni páginas — eso lo gestiona el dueño del sitio desde el editor de WordPress.</span>
+      </div>
+    </section>
+
+    <!-- Detalles -->
+    <div class="details-grid">
+      <section class="card">
+        <div class="card-header"><span>Metadatos</span></div>
+        <div id="meta-body" class="table-wrap"></div>
+      </section>
+      <section class="card">
+        <div class="card-header"><span>Imágenes</span></div>
+        <div id="imagenes-body" class="table-wrap"></div>
+      </section>
+      <section class="card">
+        <div class="card-header"><span>Scripts</span></div>
+        <div id="scripts-body" class="table-wrap"></div>
+      </section>
+      <section class="card">
+        <div class="card-header"><span>Formularios</span></div>
+        <div id="forms-body" class="table-wrap"></div>
+      </section>
+    </div>
+
+  </div>
+
+  <!-- HISTORIAL -->
+  <section class="card historial-card">
+    <div class="card-header"><span>Historial de análisis</span></div>
+    <div id="history-body" class="table-wrap">
+      <p class="empty-text">Sin análisis previos.</p>
+    </div>
+  </section>
+
+  <!-- MONITORED URLS -->
+  <section class="card historial-card" id="monitored-section" style="display:none">
+    <div class="card-header"><span>🔔 URLs en monitoreo</span></div>
+    <div id="monitored-body" class="table-wrap">
+      <p class="empty-text">Sin URLs monitoreadas.</p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <a href="/features">Features</a>
+    <a href="/faq">FAQ</a>
+    <a href="mailto:soporte@delmonteanalitica.com">soporte@delmonteanalitica.com</a>
+  </footer>
+
+</div>
+
+<script src="/static/script.js"></script>
+</body>
+</html>
