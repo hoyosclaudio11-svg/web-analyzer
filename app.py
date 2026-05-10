@@ -218,8 +218,10 @@ def api_me():
 def api_create_checkout():
     if not g.current_user:
         return jsonify({"error": "Debés iniciar sesión primero"}), 401
-    if not _stripe or not STRIPE_SECRET:
-        return jsonify({"error": "Stripe no está configurado"}), 500
+    if not _stripe:
+        return jsonify({"error": "Stripe: paquete no instalado. Ejecutá pip install stripe en el servidor."}), 500
+    if not STRIPE_SECRET:
+        return jsonify({"error": "Stripe: STRIPE_SECRET_KEY no configurada. Agregala en Render Environment."}), 500
 
     try:
         session = _stripe.checkout.Session.create(
