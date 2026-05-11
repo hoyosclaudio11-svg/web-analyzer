@@ -273,7 +273,20 @@ def api_stripe_webhook():
 @app.route("/checkout-success")
 def checkout_success():
     session_id = request.args.get("session_id", "")
-    return render_template("checkout-success.html", session_id=session_id)
+    upgraded = False
+    if session_id and _stripe and STRIPE_SECRET:
+        try:
+            sess = _stripe.checkout.Session.retrieve(session_id)
+            if sess.get("payment_status") == "paid":
+                user_id = sess.get("metadata", {}).get("user_id")
+                if user_id:
+                    upgrade_to_paid(int(user_id))
+                    track_event("user_upgraded", int(user_id))
+                    log.info(f"Usuario {user_id} actualizado a PRO (success page)")
+                    upgraded = True
+        except Exception as e:
+            log.warning(f"Error verificando sesión en success: {e}")
+    return render_template("checkout-success.html", session_id=session_id, upgraded=upgraded)
 
 
 # =============================================================================

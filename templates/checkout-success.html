@@ -42,7 +42,11 @@
   <div class="success-icon">✅</div>
   <h1 class="success-title">¡Pago exitoso!</h1>
   <p class="success-desc">
-    Tu plan <strong style="color:#58a6ff">PRO</strong> está activo.<br>
+    {% if upgraded %}
+    Tu plan <strong style="color:#58a6ff">PRO</strong> ya está activo.<br>
+    {% else %}
+    Tu plan <strong style="color:#58a6ff">PRO</strong> se activará en unos segundos.<br>
+    {% endif %}
     Ya podés descargar todas las soluciones sin restricciones.
   </p>
   <a href="/" class="btn-analyze">Volver al analizador</a>
