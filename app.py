@@ -270,7 +270,7 @@ def api_stripe_webhook():
     return jsonify({"status": "ok"})
 
 
-@app.route("/api/force-upgrade", methods=["POST"])
+@app.route("/api/force-upgrade")
 def api_force_upgrade():
     """Solo para testing — activa PRO manualmente al usuario actual."""
     if not g.current_user:
