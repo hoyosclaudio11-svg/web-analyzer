@@ -270,6 +270,15 @@ def api_stripe_webhook():
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/force-upgrade", methods=["POST"])
+def api_force_upgrade():
+    """Solo para testing — activa PRO manualmente al usuario actual."""
+    if not g.current_user:
+        return jsonify({"error": "Iniciá sesión primero"}), 401
+    upgrade_to_paid(g.current_user["id"])
+    track_event("user_upgraded", g.current_user["id"])
+    return jsonify({"tier": "paid", "message": "PRO activado manualmente"})
+
 @app.route("/checkout-success")
 def checkout_success():
     session_id = request.args.get("session_id", "")
