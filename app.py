@@ -84,7 +84,7 @@ def check_auth():
         return None
     if request.path.startswith("/api/stripe"):
         return None
-    if request.path == "/checkout-success":
+    if request.path in ("/checkout-success", "/activar-pro"):
         return None
 
     # API key global (modo admin/dev)
@@ -135,6 +135,10 @@ def log_request(response):
 def index():
     return render_template("index.html", api_key=API_KEY)
 
+
+@app.route("/activar-pro")
+def activar_pro_page():
+    return render_template("activar-pro.html")
 
 @app.route("/faq")
 def faq_page():
