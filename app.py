@@ -256,6 +256,7 @@ def api_create_preference():
             "user_id": str(g.current_user["id"]),
             "report_hash": report_hash,
         },
+        "external_reference": report_hash,
         "back_urls": {
             "success": host + "/checkout-success",
             "failure": host + "/",
@@ -295,13 +296,13 @@ def api_create_preference():
 @app.route("/api/mercadopago-webhook", methods=["POST"])
 def api_mercadopago_webhook():
     data = request.get_json(force=True)
+    log.info(f"Webhook MP recibido: {data}")
 
     if not MP_ACCESS_TOKEN:
         log.warning("MERCADOPAGO_ACCESS_TOKEN no configurada — webhook ignorado")
         return jsonify({"error": "Webhook no configurado"}), 400
 
     payment_id = data.get("data", {}).get("id") or data.get("payment_id")
-
     if not payment_id:
         log.warning("Webhook MP sin payment_id")
         return jsonify({"error": "payment_id faltante"}), 400
@@ -311,15 +312,31 @@ def api_mercadopago_webhook():
         result = sdk.payment().get(payment_id)
         payment = result.get("response", result)
         status = payment.get("status", "")
-        metadata = payment.get("metadata", {})
+        metadata = payment.get("metadata") or {}
         user_id = metadata.get("user_id")
         report_hash = metadata.get("report_hash")
+
+        # Fallback: si metadata está vacío, obtener la preferencia asociada
+        if not user_id or not report_hash:
+            order = payment.get("order") or payment.get("merchant_order") or {}
+            if not order:
+                # Buscar en el payment directamente
+                pref_id = payment.get("preference_id", "")
+            else:
+                pref_id = order.get("preference_id", "")
+            if pref_id:
+                pref_result = sdk.preference().get(pref_id)
+                pref = pref_result.get("response", pref_result)
+                pref_meta = pref.get("metadata") or {}
+                user_id = user_id or pref_meta.get("user_id")
+                report_hash = report_hash or pref_meta.get("report_hash")
+                log.info(f"Webhook MP: metadata recuperado de preferencia {pref_id}")
 
         if status == "approved" and user_id and report_hash:
             purchased = purchase_analysis(int(user_id), report_hash, payment_id)
             if purchased:
                 track_event("analysis_purchased", int(user_id), "", report_hash)
-                log.info(f"Usuario {user_id} compró análisis {report_hash} vía MP webhook")
+                log.info(f"Usuario {user_id} compro analisis {report_hash} via MP webhook")
             else:
                 log.info(f"Compra duplicada: user={user_id} report={report_hash}")
         else:
@@ -344,25 +361,48 @@ def api_force_upgrade():
 
 @app.route("/checkout-success")
 def checkout_success():
-    payment_id = request.args.get("payment_id", "")
-    status = request.args.get("status", "")
+    # MP Checkout Pro redirige con: collection_id, collection_status, preference_id, external_reference, payment_id
+    payment_id = request.args.get("payment_id") or request.args.get("collection_id", "")
+    status = request.args.get("status") or request.args.get("collection_status", "")
+    preference_id = request.args.get("preference_id", "")
+    external_ref = request.args.get("external_reference", "")
     purchased = False
 
-    if payment_id and _mp and MP_ACCESS_TOKEN and status == "approved":
+    if _mp and MP_ACCESS_TOKEN and status == "approved":
+        sdk = _mp.SDK(MP_ACCESS_TOKEN)
+        payment = None
+
+        # Intentar obtener el pago por ID directo
         try:
-            sdk = _mp.SDK(MP_ACCESS_TOKEN)
-            result = sdk.payment().get(payment_id)
-            payment = result.get("response", result)
-            metadata = payment.get("metadata", {})
-            user_id = metadata.get("user_id")
-            report_hash = metadata.get("report_hash")
-            if user_id and report_hash and payment.get("status") == "approved":
-                purchase_analysis(int(user_id), report_hash, payment_id)
-                track_event("analysis_purchased", int(user_id), "", report_hash)
-                log.info(f"Usuario {user_id} compró análisis {report_hash} (success page)")
-                purchased = True
-        except Exception as e:
-            log.warning(f"Error verificando pago MP en success: {e}")
+            if payment_id:
+                result = sdk.payment().get(payment_id)
+                payment = result.get("response", result)
+        except Exception:
+            pass
+
+        # Si no se encontró, buscar por external_reference
+        if not payment and external_ref:
+            try:
+                search = sdk.payment().search({"external_reference": external_ref})
+                results = search.get("response", {}).get("results", [])
+                if results:
+                    payment = results[0]
+                    payment_id = payment.get("id", payment_id)
+            except Exception as e:
+                log.warning(f"Error buscando pago MP en success: {e}")
+
+        if payment:
+            try:
+                metadata = payment.get("metadata", {}) or {}
+                user_id = metadata.get("user_id")
+                report_hash = metadata.get("report_hash")
+                if user_id and report_hash and payment.get("status") == "approved":
+                    purchase_analysis(int(user_id), report_hash, payment_id)
+                    track_event("analysis_purchased", int(user_id), "", report_hash)
+                    log.info(f"Usuario {user_id} compro analisis {report_hash} (success page)")
+                    purchased = True
+            except Exception as e:
+                log.warning(f"Error registrando compra en success: {e}")
 
     return render_template("checkout-success.html", payment_id=payment_id, upgraded=purchased)
 
