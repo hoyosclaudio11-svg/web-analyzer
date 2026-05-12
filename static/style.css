@@ -797,6 +797,28 @@ body {
 }
 .footer a:hover { color: var(--blue); }
 
+/* ---- Notification Toast ---- */
+.notification-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #238636;
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  z-index: 9999;
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.3s, transform 0.3s;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.notification-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 /* ---- Utilities ---- */
 .verde { color: var(--green); }
 .amarillo { color: var(--yellow); }

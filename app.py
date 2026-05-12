@@ -26,7 +26,7 @@ try:
     import mercadopago as _mp
 except ImportError:
     _mp = None
-from flask import Flask, render_template, request, jsonify, send_file, g
+from flask import Flask, render_template, request, jsonify, send_file, g, redirect
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -367,12 +367,13 @@ def checkout_success():
     preference_id = request.args.get("preference_id", "")
     external_ref = request.args.get("external_reference", "")
     purchased = False
+    report_hash = ""
+    analyze_url = ""
 
     if _mp and MP_ACCESS_TOKEN and status == "approved":
         sdk = _mp.SDK(MP_ACCESS_TOKEN)
         payment = None
 
-        # Intentar obtener el pago por ID directo
         try:
             if payment_id:
                 result = sdk.payment().get(payment_id)
@@ -380,7 +381,6 @@ def checkout_success():
         except Exception:
             pass
 
-        # Si no se encontró, buscar por external_reference
         if not payment and external_ref:
             try:
                 search = sdk.payment().search({"external_reference": external_ref})
@@ -393,7 +393,7 @@ def checkout_success():
 
         if payment:
             try:
-                metadata = payment.get("metadata", {}) or {}
+                metadata = payment.get("metadata") or {}
                 user_id = metadata.get("user_id")
                 report_hash = metadata.get("report_hash")
                 if user_id and report_hash and payment.get("status") == "approved":
@@ -401,10 +401,18 @@ def checkout_success():
                     track_event("analysis_purchased", int(user_id), "", report_hash)
                     log.info(f"Usuario {user_id} compro analisis {report_hash} (success page)")
                     purchased = True
+                    # Obtener la URL analizada para redirigir al usuario a sus resultados
+                    shared = get_shared_report(report_hash)
+                    if shared:
+                        analyze_url = shared.get("url", "")
             except Exception as e:
                 log.warning(f"Error registrando compra en success: {e}")
 
-    return render_template("checkout-success.html", payment_id=payment_id, upgraded=purchased)
+    if purchased and analyze_url:
+        from urllib.parse import quote
+        return redirect(f"/?analyze_url={quote(analyze_url, safe='')}&purchased=1", code=302)
+
+    return render_template("checkout-success.html", payment_id=payment_id, upgraded=purchased, report_hash=report_hash)
 
 
 # =============================================================================

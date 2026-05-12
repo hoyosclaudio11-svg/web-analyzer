@@ -55,7 +55,23 @@ document.addEventListener('DOMContentLoaded', () => {
   loadHistory();
   initAuth();
   loadStats();
-  input.focus();
+
+  // Auto-analizar si el usuario vuelve de un pago exitoso
+  const params = new URLSearchParams(window.location.search);
+  const analyzeUrl = params.get('analyze_url');
+  const wasPurchased = params.get('purchased');
+  if (analyzeUrl) {
+    input.value = analyzeUrl;
+    if (wasPurchased === '1') {
+      showNotification('¡Pago exitoso! Tus descargas están desbloqueadas.');
+    }
+    analyze(analyzeUrl).then(() => {
+      // Limpiar query string de la URL sin recargar
+      window.history.replaceState({}, '', '/');
+    });
+  } else {
+    input.focus();
+  }
 });
 
 // =============================================================================
@@ -759,6 +775,20 @@ function showError(msg) {
 
 function hideError() {
   $('#error-box').style.display = 'none';
+}
+
+function showNotification(msg) {
+  const el = document.createElement('div');
+  el.className = 'notification-toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => {
+    el.classList.add('show');
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 400);
+    }, 4000);
+  });
 }
 
 function esc(str) {
