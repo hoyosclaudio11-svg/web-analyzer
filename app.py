@@ -3,19 +3,29 @@ Web Analyzer & Optimizer — Backend Flask
 Analiza URLs públicas y genera soluciones descargables.
 """
 import os
+from pathlib import Path
+
+# Cargar .env si existe
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).resolve().parent / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path)
+except ImportError:
+    pass
 import re
 import json
 import uuid
 import hashlib
 import time
 import logging
+import requests
 from datetime import datetime
-from pathlib import Path
 
 try:
-    import stripe as _stripe
+    import mercadopago as _mp
 except ImportError:
-    _stripe = None
+    _mp = None
 from flask import Flask, render_template, request, jsonify, send_file, g
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -28,6 +38,7 @@ from database import (
     upgrade_to_paid, get_user_stats, increment_analyses, increment_downloads,
     create_shared_report, get_shared_report, track_event,
     add_monitored_url, get_monitored_urls, update_monitored_score, delete_monitored_url,
+    purchase_analysis, has_purchased, get_purchased_reports,
 )
 
 # ---------------------------------------------------------------------------
@@ -46,11 +57,9 @@ limiter = Limiter(
 )
 
 API_KEY = os.environ.get("ANALYZER_API_KEY", "")
-STRIPE_SECRET = os.environ.get("STRIPE_SECRET_KEY", "")
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-PRICE_USD = 12  # Precio one-shot del plan PRO
-if _stripe and STRIPE_SECRET:
-    _stripe.api_key = STRIPE_SECRET
+MP_ACCESS_TOKEN = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "")
+PRICE_ARS = int(os.environ.get("PRICE_ARS", "1000"))  # Precio en ARS, default $10 para pruebas
+MP_SANDBOX = os.environ.get("MERCADOPAGO_SANDBOX", "false").lower() == "true"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -82,7 +91,7 @@ def check_auth():
         return None
     if request.path in ("/api/auth/register", "/api/auth/login"):
         return None
-    if request.path.startswith("/api/stripe"):
+    if request.path.startswith("/api/mercadopago"):
         return None
     if request.path in ("/checkout-success", "/activar-pro"):
         return None
@@ -203,73 +212,122 @@ def api_login():
 def api_me():
     if not g.current_user:
         return jsonify({"tier": "free", "authenticated": False})
-    stats = get_user_stats(g.current_user["id"])
+    user_id = g.current_user["id"]
+    stats = get_user_stats(user_id)
     return jsonify({
         "email": g.current_user["email"],
         "tier": stats.get("tier", "free"),
         "analyses_count": stats.get("analyses_count", 0),
         "downloads_count": stats.get("downloads_count", 0),
         "authenticated": True,
+        "purchased_reports": get_purchased_reports(user_id),
     })
 
 
 # =============================================================================
-# Upgrade (Stripe Checkout)
+# Upgrade (MercadoPago Checkout Pro)
 # =============================================================================
 
 
-@app.route("/api/create-checkout-session", methods=["POST"])
-def api_create_checkout():
+@app.route("/api/create-preference", methods=["POST"])
+def api_create_preference():
     if not g.current_user:
         return jsonify({"error": "Debés iniciar sesión primero"}), 401
-    if not _stripe:
-        return jsonify({"error": "Stripe: paquete no instalado. Ejecutá pip install stripe en el servidor."}), 500
-    if not STRIPE_SECRET:
-        return jsonify({"error": "Stripe: STRIPE_SECRET_KEY no configurada. Agregala en Render Environment."}), 500
+    if not _mp:
+        return jsonify({"error": "MercadoPago: paquete no instalado."}), 500
+    if not MP_ACCESS_TOKEN:
+        return jsonify({"error": "MercadoPago: MERCADOPAGO_ACCESS_TOKEN no configurada."}), 500
+
+    data = request.get_json(force=True)
+    report_hash = (data.get("report_hash") or "").strip()
+    if not report_hash:
+        return jsonify({"error": "report_hash requerido"}), 400
+
+    host = request.host_url.rstrip("/")
+
+    preference_data = {
+        "items": [{
+            "title": "Web Analyzer — Análisis y descargas",
+            "quantity": 1,
+            "currency_id": "ARS",
+            "unit_price": PRICE_ARS,
+        }],
+        "metadata": {
+            "user_id": str(g.current_user["id"]),
+            "report_hash": report_hash,
+        },
+        "back_urls": {
+            "success": host + "/checkout-success",
+            "failure": host + "/",
+            "pending": host + "/",
+        },
+    }
+    # notification_url solo si estamos en producción (Render)
+    if "onrender.com" in host:
+        preference_data["notification_url"] = host + "/api/mercadopago-webhook"
 
     try:
-        session = _stripe.checkout.Session.create(
-            mode="payment",
-            line_items=[{
-                "price_data": {
-                    "currency": "usd",
-                    "unit_amount": PRICE_USD * 100,  # centavos
-                    "product_data": {"name": "Web Analyzer PRO — Acceso Vitalicio"},
-                },
-                "quantity": 1,
-            }],
-            metadata={"user_id": str(g.current_user["id"])},
-            success_url=request.host_url.rstrip("/") + "/checkout-success?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url=request.host_url.rstrip("/") + "/",
+        headers = {
+            "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
+            "Content-Type": "application/json",
+        }
+        if MP_SANDBOX:
+            headers["X-Sandbox"] = "true"
+        r = requests.post(
+            "https://api.mercadopago.com/checkout/preferences",
+            json=preference_data,
+            headers=headers,
+            timeout=15,
         )
-        return jsonify({"url": session.url})
+        pref = r.json()
+        init_point = pref.get("sandbox_init_point") if MP_SANDBOX else pref.get("init_point", "")
+        if not init_point:
+            init_point = pref.get("sandbox_init_point") or pref.get("init_point", "")
+        if init_point:
+            return jsonify({"url": init_point, "preference_id": pref.get("id")})
+        log.error(f"MP preference sin init_point: {pref}")
+        return jsonify({"error": "No se pudo crear la preferencia de pago"}), 500
     except Exception as e:
-        log.exception("Error creando sesión Stripe")
+        log.exception("Error creando preferencia MercadoPago")
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/stripe-webhook", methods=["POST"])
-def api_stripe_webhook():
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get("Stripe-Signature", "")
+@app.route("/api/mercadopago-webhook", methods=["POST"])
+def api_mercadopago_webhook():
+    data = request.get_json(force=True)
 
-    if not STRIPE_WEBHOOK_SECRET:
-        log.warning("STRIPE_WEBHOOK_SECRET no configurada — webhook ignorado")
+    if not MP_ACCESS_TOKEN:
+        log.warning("MERCADOPAGO_ACCESS_TOKEN no configurada — webhook ignorado")
         return jsonify({"error": "Webhook no configurado"}), 400
 
-    try:
-        event = _stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-    except (ValueError, _stripe.error.SignatureVerificationError) as e:
-        log.warning(f"Webhook inválido: {e}")
-        return jsonify({"error": "Firma inválida"}), 400
+    payment_id = data.get("data", {}).get("id") or data.get("payment_id")
 
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
-        user_id = session.get("metadata", {}).get("user_id")
-        if user_id:
-            upgrade_to_paid(int(user_id))
-            track_event("user_upgraded", int(user_id))
-            log.info(f"Usuario {user_id} actualizado a pago vía Stripe")
+    if not payment_id:
+        log.warning("Webhook MP sin payment_id")
+        return jsonify({"error": "payment_id faltante"}), 400
+
+    try:
+        sdk = _mp.SDK(MP_ACCESS_TOKEN)
+        result = sdk.payment().get(payment_id)
+        payment = result.get("response", result)
+        status = payment.get("status", "")
+        metadata = payment.get("metadata", {})
+        user_id = metadata.get("user_id")
+        report_hash = metadata.get("report_hash")
+
+        if status == "approved" and user_id and report_hash:
+            purchased = purchase_analysis(int(user_id), report_hash, payment_id)
+            if purchased:
+                track_event("analysis_purchased", int(user_id), "", report_hash)
+                log.info(f"Usuario {user_id} compró análisis {report_hash} vía MP webhook")
+            else:
+                log.info(f"Compra duplicada: user={user_id} report={report_hash}")
+        else:
+            log.info(f"Webhook MP payment {payment_id}: status={status}, user_id={user_id}, report_hash={report_hash}")
+
+    except Exception as e:
+        log.exception("Error procesando webhook MP")
+        return jsonify({"error": str(e)}), 500
 
     return jsonify({"status": "ok"})
 
@@ -283,23 +341,30 @@ def api_force_upgrade():
     track_event("user_upgraded", g.current_user["id"])
     return jsonify({"tier": "paid", "message": "PRO activado manualmente"})
 
+
 @app.route("/checkout-success")
 def checkout_success():
-    session_id = request.args.get("session_id", "")
-    upgraded = False
-    if session_id and _stripe and STRIPE_SECRET:
+    payment_id = request.args.get("payment_id", "")
+    status = request.args.get("status", "")
+    purchased = False
+
+    if payment_id and _mp and MP_ACCESS_TOKEN and status == "approved":
         try:
-            sess = _stripe.checkout.Session.retrieve(session_id)
-            if sess.get("payment_status") == "paid":
-                user_id = sess.get("metadata", {}).get("user_id")
-                if user_id:
-                    upgrade_to_paid(int(user_id))
-                    track_event("user_upgraded", int(user_id))
-                    log.info(f"Usuario {user_id} actualizado a PRO (success page)")
-                    upgraded = True
+            sdk = _mp.SDK(MP_ACCESS_TOKEN)
+            result = sdk.payment().get(payment_id)
+            payment = result.get("response", result)
+            metadata = payment.get("metadata", {})
+            user_id = metadata.get("user_id")
+            report_hash = metadata.get("report_hash")
+            if user_id and report_hash and payment.get("status") == "approved":
+                purchase_analysis(int(user_id), report_hash, payment_id)
+                track_event("analysis_purchased", int(user_id), "", report_hash)
+                log.info(f"Usuario {user_id} compró análisis {report_hash} (success page)")
+                purchased = True
         except Exception as e:
-            log.warning(f"Error verificando sesión en success: {e}")
-    return render_template("checkout-success.html", session_id=session_id, upgraded=upgraded)
+            log.warning(f"Error verificando pago MP en success: {e}")
+
+    return render_template("checkout-success.html", payment_id=payment_id, upgraded=purchased)
 
 
 # =============================================================================
@@ -351,21 +416,21 @@ def api_analyze():
         update_monitored_score(url, user_id, promedio)
     track_event("analysis_completed", user_id, url, json.dumps({"promedio": promedio}))
 
-    # Determinar qué soluciones devolver según tier
+    # Determinar si el usuario compró este análisis
     user_tier = g.current_user["tier"] if g.current_user else "free"
-    soluciones = resultado.get("soluciones", [])
+    purchased = user_id and (user_tier == "paid" or has_purchased(user_id, report_hash))
 
-    if user_tier == "free":
-        # Sin descarga — solo metadata de soluciones
-        soluciones_out = [
-            {"nombre": s["nombre"], "tipo": s["tipo"], "descripcion": s["descripcion"], "bloqueado": s["tipo"] in ("zip", "json")}
-            for s in soluciones
-        ]
-    else:
-        soluciones_out = [
-            {"nombre": s["nombre"], "tipo": s["tipo"], "descripcion": s["descripcion"], "path": s.get("path", ""), "bloqueado": False}
-            for s in soluciones
-        ]
+    soluciones = resultado.get("soluciones", [])
+    soluciones_out = [
+        {
+            "nombre": s["nombre"],
+            "tipo": s["tipo"],
+            "descripcion": s["descripcion"],
+            "path": s.get("path", ""),
+            "bloqueado": not purchased and s["tipo"] in ("zip", "json"),
+        }
+        for s in soluciones
+    ]
 
     return jsonify({
         "url": resultado["url"],
@@ -386,6 +451,8 @@ def api_analyze():
         "recomendaciones": resultado.get("recomendaciones", []),
         "soluciones": soluciones_out,
         "errores": resultado.get("errores", []),
+        "report_hash": report_hash,
+        "purchased": purchased,
         "report_url": f"/r/{report_hash}",
         "paginas": resultado.get("paginas", []),
         "promedio_sitio": resultado.get("promedio_sitio", promedio),
@@ -403,12 +470,20 @@ def api_download(filename):
     if not re.match(r'^[a-zA-Z0-9_.\-]+$', filename):
         return jsonify({"error": "Nombre de archivo inválido"}), 400
 
-    # Verificar tier
-    if not g.current_user or g.current_user.get("tier") != "paid":
+    report_hash = (request.args.get("report_hash") or "").strip()
+
+    # Verificar compra: tier 'paid' (legacy) O compró este análisis
+    has_access = False
+    if g.current_user:
+        if g.current_user.get("tier") == "paid":
+            has_access = True
+        elif report_hash and has_purchased(g.current_user["id"], report_hash):
+            has_access = True
+
+    if not has_access:
         return jsonify({
-            "error": "Descarga exclusiva del plan pago",
-            "action": "upgrade",
-            "upgrade_url": "/api/upgrade",
+            "error": "Descarga exclusiva — comprá el análisis por ARS 12.000",
+            "action": "purchase",
         }), 402
 
     safe = os.path.basename(filename)

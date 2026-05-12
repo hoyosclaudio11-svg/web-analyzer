@@ -81,6 +81,18 @@ def init_db():
         );
 
         CREATE INDEX IF NOT EXISTS idx_monitored_user ON monitored_urls(user_id);
+
+        CREATE TABLE IF NOT EXISTS purchases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            report_hash TEXT NOT NULL,
+            payment_id TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(user_id, report_hash)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_purchases_user ON purchases(user_id);
+        CREATE INDEX IF NOT EXISTS idx_purchases_report ON purchases(report_hash);
     """)
     c.commit()
 
@@ -184,6 +196,45 @@ def increment_downloads(user_id: int) -> None:
     c = _conn()
     c.execute("UPDATE users SET downloads_count = downloads_count + 1 WHERE id = ?", (user_id,))
     c.commit()
+
+
+# =============================================================================
+# Compras por análisis (MercadoPago)
+# =============================================================================
+
+def purchase_analysis(user_id: int, report_hash: str, payment_id: str = "") -> bool:
+    """Registra la compra de un análisis. Retorna True si se insertó, False si ya existía."""
+    c = _conn()
+    try:
+        c.execute(
+            "INSERT INTO purchases (user_id, report_hash, payment_id) VALUES (?, ?, ?)",
+            (user_id, report_hash, payment_id),
+        )
+        c.commit()
+        increment_analyses(user_id)
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def has_purchased(user_id: int, report_hash: str) -> bool:
+    """Retorna True si el usuario compró este análisis."""
+    c = _conn()
+    row = c.execute(
+        "SELECT 1 FROM purchases WHERE user_id = ? AND report_hash = ?",
+        (user_id, report_hash),
+    ).fetchone()
+    return row is not None
+
+
+def get_purchased_reports(user_id: int) -> list[str]:
+    """Retorna la lista de report_hash comprados por el usuario."""
+    c = _conn()
+    rows = c.execute(
+        "SELECT report_hash FROM purchases WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,),
+    ).fetchall()
+    return [r["report_hash"] for r in rows]
 
 
 # =============================================================================

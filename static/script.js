@@ -16,7 +16,9 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
 // ---------- User state ----------
-let currentUser = null;  // { email, tier, authenticated, analyses_count, downloads_count }
+let currentUser = null;  // { email, tier, authenticated, analyses_count, downloads_count, purchased_reports }
+let currentReportHash = null;  // hash del último análisis
+let currentPurchased = false;  // si el último análisis fue comprado
 
 function getUserToken() {
   return localStorage.getItem('wa_token') || '';
@@ -163,7 +165,7 @@ function updateAuthUI() {
     btnLogin.style.display = 'none';
     btnRegister.style.display = 'none';
     btnLogout.style.display = 'inline-block';
-    banner.style.display = currentUser.tier === 'free' ? 'block' : 'none';
+    banner.style.display = (currentUser && currentUser.authenticated) ? 'block' : 'none';
   } else {
     tierEl.style.display = 'none';
     btnLogin.style.display = 'inline-block';
@@ -269,14 +271,22 @@ async function upgrade() {
     openAuthModal('login');
     return;
   }
+  if (!currentReportHash) {
+    alert('Analizá una URL primero antes de comprar.');
+    return;
+  }
   try {
-    const resp = await fetch('/api/create-checkout-session', { method: 'POST', headers: apiHeaders() });
+    const resp = await fetch('/api/create-preference', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ report_hash: currentReportHash }),
+    });
     const data = await resp.json();
-    if (!resp.ok) { alert(data.error || 'Error al crear sesión de pago'); return; }
+    if (!resp.ok) { alert(data.error || 'Error al crear preferencia de pago'); return; }
     if (data.url) {
       window.location.href = data.url;
     } else {
-      alert('No se pudo iniciar el checkout. Reintentá.');
+      alert('No se pudo iniciar el pago. Reintentá.');
     }
   } catch (err) {
     alert('Error de conexión');
@@ -341,6 +351,8 @@ async function deleteMonitor(id) {
 // =============================================================================
 
 function renderResults(data) {
+  currentReportHash = data.report_hash || null;
+  currentPurchased = data.purchased || false;
   showResults();
   renderScorecard(data.scorecard, data.promedio, data.promedio_color);
   renderShareLink(data.report_url, data.url_final || data.url, data.promedio);
@@ -564,13 +576,19 @@ function renderNextSteps(data) {
     <div class="next-steps-list">
       ${steps.map(s => {
         const locked = !!(s.file && (s.file.bloqueado || s.file.tipo === 'zip' || s.file.tipo === 'json'));
-        const isPaid = currentUser && currentUser.authenticated && currentUser.tier === 'paid';
+        const canDownload = currentPurchased || (currentUser && currentUser.tier === 'paid');
         let actionHtml = '';
         if (s.cta && s.file) {
-          if (locked && !isPaid) {
-            actionHtml = `<span class="locked-badge" style="cursor:pointer;margin-top:8px" onclick="document.getElementById('btn-upgrade').click()">PRO — Desbloquear</span>`;
+          if (locked && !canDownload) {
+            actionHtml = `<span class="locked-badge" style="cursor:pointer;margin-top:8px" onclick="document.getElementById('btn-upgrade').click()">ARS 12.000 — Desbloquear descargas</span>`;
           } else {
-            actionHtml = `<a href="/api/download/${encodeURIComponent(s.file.nombre)}${getUserToken() ? '?user_token=' + encodeURIComponent(getUserToken()) : API_KEY ? '?token=' + encodeURIComponent(API_KEY) : ''}" class="btn-download step-btn" download>
+            const dlUrl = '/api/download/' + encodeURIComponent(s.file.nombre);
+            const params = [];
+            if (getUserToken()) params.push('user_token=' + encodeURIComponent(getUserToken()));
+            if (currentReportHash) params.push('report_hash=' + encodeURIComponent(currentReportHash));
+            if (API_KEY) params.push('token=' + encodeURIComponent(API_KEY));
+
+            actionHtml = `<a href="${dlUrl}?${params.join('&')}" class="btn-download step-btn" download>
                 ${s.cta}
               </a>`;
           }
@@ -594,13 +612,17 @@ function renderSoluciones(soluciones) {
     body.innerHTML = '<p class="empty-text">Sin soluciones generadas.</p>';
     return;
   }
-  const isPaid = currentUser && currentUser.authenticated && currentUser.tier === 'paid';
+  const canDownload = currentPurchased || (currentUser && currentUser.tier === 'paid');
 
   body.innerHTML = soluciones.map(s => {
-    const locked = !isPaid && (s.bloqueado || s.tipo === 'zip' || s.tipo === 'json');
+    const locked = !canDownload && (s.bloqueado || s.tipo === 'zip' || s.tipo === 'json');
+    const dlParams = [];
+    if (getUserToken()) dlParams.push('user_token=' + encodeURIComponent(getUserToken()));
+    if (currentReportHash) dlParams.push('report_hash=' + encodeURIComponent(currentReportHash));
+    if (API_KEY) dlParams.push('token=' + encodeURIComponent(API_KEY));
     const downloadHtml = locked
-      ? `<span class="locked-badge">PRO</span>`
-      : `<a href="${DOWNLOAD}/${encodeURIComponent(s.nombre)}${getUserToken() ? '?user_token=' + encodeURIComponent(getUserToken()) : ''}" class="btn-download" download>Descargar</a>`;
+      ? `<span class="locked-badge">ARS 12.000</span>`
+      : `<a href="${DOWNLOAD}/${encodeURIComponent(s.nombre)}?${dlParams.join('&')}" class="btn-download" download>Descargar</a>`;
     return `
       <div class="solucion-item${locked ? ' locked' : ''}">
         <div class="sol-type">.${esc(s.tipo)}</div>
