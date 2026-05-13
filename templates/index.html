@@ -61,15 +61,11 @@
 
   <!-- HERO -->
   <section class="hero-section">
-    <h1 class="hero-title">Analizá, <span style="color:var(--blue)">corregí</span> y despegá</h1>
-    <p class="hero-desc">Pegá la URL de cualquier sitio público. En segundos tenés una auditoría completa en 5 categorías con puntaje, hallazgos críticos, recomendaciones y un plugin descargable que aplica las correcciones automáticamente.</p>
+    <h1 class="hero-title">¿Tu web <span style="color:var(--red)">pierde clientes</span> y no sabés por qué?</h1>
+    <p class="hero-desc">Analizá cualquier sitio <strong>gratis y sin registro</strong>. En 30 segundos tenés una auditoría en 5 categorías con puntaje, hallazgos y soluciones que podés descargar como plugin para WordPress.</p>
     <div class="hero-links">
       <a href="/features">Qué hace →</a>
       <a href="/faq">FAQ →</a>
-    </div>
-    <div class="hero-stats" id="hero-stats" style="display:none">
-      <span><strong id="stat-analyses">0</strong> sitios analizados</span>
-      <span><strong id="stat-downloads">0</strong> plugins descargados</span>
     </div>
   </section>
 
@@ -79,15 +75,28 @@
       <div class="url-input-wrap">
         <span class="url-prefix"></span>
         <input type="text" id="url-input" class="url-input"
-               placeholder="ej: www.riverplate-info.com.ar"
+               placeholder="ej: tu-sitio-web.com"
                autocomplete="off" spellcheck="false">
       </div>
       <button type="submit" id="btn-analyze" class="btn-analyze">
-        Analizar
+        Analizar gratis
       </button>
     </form>
-    <p id="input-hint" class="input-hint">Ingresá una URL pública para analizar en 5 categorías: Rendimiento, Accesibilidad, SEO, UX y Conversión.</p>
+    <p id="input-hint" class="input-hint">Sin registro. Sin costo. Descubrí en 30 segundos qué frena a tu sitio.</p>
   </section>
+
+  <!-- CTA POST-DEMO (anónimo) -->
+  <div id="demo-cta" class="demo-cta" style="display:none">
+    <div class="demo-cta-content">
+      <h3>¿Querés ver las <span style="color:var(--blue)">recomendaciones completas</span> y descargar las soluciones?</h3>
+      <p>Creá tu cuenta gratis en 10 segundos. Sin tarjeta. Sin compromiso.</p>
+      <div class="demo-cta-buttons">
+        <button id="btn-demo-register" class="btn-upgrade">Crear cuenta gratis</button>
+        <span style="color:#888;margin:0 12px">o</span>
+        <button id="btn-demo-buy" class="btn-upgrade" style="background:var(--green)">Comprar por ARS 12.000</button>
+      </div>
+    </div>
+  </div>
 
   <!-- LOADING -->
   <div id="loading" class="loading" style="display:none">

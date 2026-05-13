@@ -52,6 +52,25 @@ document.addEventListener('DOMContentLoaded', () => {
     await analyze(url);
   });
 
+  // Botones CTA demo
+  const btnDemoRegister = $('#btn-demo-register');
+  const btnDemoBuy = $('#btn-demo-buy');
+  if (btnDemoRegister) {
+    btnDemoRegister.addEventListener('click', () => {
+      openAuthModal('register');
+      const demoCta = $('#demo-cta');
+      if (demoCta) demoCta.style.display = 'none';
+    });
+  }
+  if (btnDemoBuy) {
+    btnDemoBuy.addEventListener('click', () => {
+      // Redirigir a registro primero, luego a compra
+      openAuthModal('register');
+      const demoCta = $('#demo-cta');
+      if (demoCta) demoCta.style.display = 'none';
+    });
+  }
+
   loadHistory();
   initAuth();
   loadStats();
@@ -181,7 +200,8 @@ function updateAuthUI() {
     btnLogin.style.display = 'none';
     btnRegister.style.display = 'none';
     btnLogout.style.display = 'inline-block';
-    banner.style.display = (currentUser && currentUser.authenticated) ? 'block' : 'none';
+    banner.style.display = 'block';
+    hideDemoCTA();
   } else {
     tierEl.style.display = 'none';
     btnLogin.style.display = 'inline-block';
@@ -381,6 +401,22 @@ function renderResults(data) {
   renderImagenes(data.imagenes);
   renderScripts(data.scripts);
   renderForms(data.forms);
+
+  // Mostrar CTA para usuarios anonimos
+  if (!authToken) {
+    showDemoCTA();
+  }
+}
+
+function showDemoCTA() {
+  const cta = $('#demo-cta');
+  if (cta) cta.style.display = 'block';
+  setTimeout(() => { if (cta) cta.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 500);
+}
+
+function hideDemoCTA() {
+  const cta = $('#demo-cta');
+  if (cta) cta.style.display = 'none';
 }
 
 function renderScorecard(scorecard, promedio, color) {
