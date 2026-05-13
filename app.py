@@ -282,13 +282,16 @@ def api_create_preference():
             timeout=15,
         )
         pref = r.json()
+        if r.status_code >= 400:
+            log.error(f"MP API error {r.status_code}: {pref}")
+            return jsonify({"error": f"MercadoPago: {pref.get('message', pref.get('error', 'error desconocido'))}"}), 500
         init_point = pref.get("sandbox_init_point") if MP_SANDBOX else pref.get("init_point", "")
         if not init_point:
             init_point = pref.get("sandbox_init_point") or pref.get("init_point", "")
         if init_point:
             return jsonify({"url": init_point, "preference_id": pref.get("id")})
         log.error(f"MP preference sin init_point: {pref}")
-        return jsonify({"error": "No se pudo crear la preferencia de pago"}), 500
+        return jsonify({"error": f"No se pudo crear la preferencia. MP: {pref.get('message', pref)}"}), 500
     except Exception as e:
         log.exception("Error creando preferencia MercadoPago")
         return jsonify({"error": str(e)}), 500
