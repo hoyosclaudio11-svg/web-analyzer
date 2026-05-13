@@ -450,7 +450,7 @@ def api_analyze():
         promedio = 0
 
     # Generar URL compartible
-    report_hash = hashlib.sha256(f"{url}-{time.time()}".encode()).hexdigest()[:12]
+    report_hash = hashlib.sha256(url.encode()).hexdigest()[:12]
     create_shared_report(report_hash, url, {
         k: {"puntaje": s, "color": _color(s), "detalles": d}
         for k, (s, d) in scores.items()
