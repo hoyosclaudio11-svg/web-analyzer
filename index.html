@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web Analyzer — Auditoría de sitios web en 30 segundos</title>
+<meta name="description" content="Analizá cualquier sitio gratis y sin registro. Descubrí qué frena a tu web en 5 categorías: Rendimiento, SEO, Accesibilidad, UX y Conversión.">
+<meta property="og:title" content="Web Analyzer — ¿Tu web pierde clientes?">
+<meta property="og:description" content="Auditoría gratuita en 30 segundos. Incluso los sitios más grandes tienen problemas.">
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+    --border: #30363d; --text: #e6edf3; --text2: #8b949e; --text3: #6e7681;
+    --blue: #58a6ff; --green: #3fb950; --yellow: #d29922; --red: #f85149;
+    --accent: #1f6feb; --radius: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  /* Hero */
+  .hero { text-align: center; padding: 72px 16px 48px; }
+  .hero h1 { font-size: 40px; font-weight: 800; color: #fff; letter-spacing: -0.5px; margin-bottom: 16px; line-height: 1.2; }
+  .hero h1 .hl { color: var(--red); }
+  .hero p { font-size: 16px; color: var(--text2); max-width: 600px; margin: 0 auto 32px; line-height: 1.7; }
+  .btn-go {
+    display: inline-block; padding: 16px 40px; background: var(--accent); color: #fff;
+    border: none; border-radius: var(--radius); font-size: 17px; font-weight: 700;
+    text-decoration: none; cursor: pointer; transition: background 0.15s, transform 0.1s;
+  }
+  .btn-go:hover { background: #388bfd; transform: scale(1.02); }
+  .hero-note { font-size: 11px; color: var(--text3); margin-top: 12px; }
+
+  /* Examples */
+  .examples { padding: 24px 0 56px; }
+  .examples h2 { text-align: center; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); margin-bottom: 4px; }
+  .examples .sub { text-align: center; font-size: 12px; color: var(--text3); margin-bottom: 20px; }
+  .examples-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 760px; margin: 0 auto; }
+  @media (max-width: 600px) { .examples-grid { grid-template-columns: 1fr; } }
+  .ex-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+  }
+  .ex-card:hover { border-color: var(--blue); }
+  .ex-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .ex-badge {
+    width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 18px; font-weight: 800; flex-shrink: 0; color: #000;
+  }
+  .ex-badge.rojo { background: var(--red); }
+  .ex-badge.amarillo { background: var(--yellow); }
+  .ex-site { font-family: monospace; font-size: 14px; color: var(--blue); font-weight: 600; }
+  .ex-label { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .ex-scores { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .ex-scores span { font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 4px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .dot.rojo { background: var(--red); }
+  .dot.amarillo { background: var(--yellow); }
+  .dot.verde { background: var(--green); }
+  .ex-cta { color: var(--blue); font-size: 12px; font-weight: 600; }
+
+  /* Features */
+  .features { padding: 56px 0; border-top: 1px solid var(--border); }
+  .features h2 { text-align: center; font-size: 22px; font-weight: 700; margin-bottom: 32px; color: #fff; }
+  .feat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; max-width: 760px; margin: 0 auto; }
+  .feat {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px; text-align: center;
+  }
+  .feat-icon { font-size: 28px; margin-bottom: 10px; }
+  .feat h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .feat p { font-size: 12px; color: var(--text3); line-height: 1.5; }
+
+  /* CTA bottom */
+  .cta-bottom { text-align: center; padding: 48px 16px; border-top: 1px solid var(--border); }
+  .cta-bottom h2 { font-size: 22px; font-weight: 700; margin-bottom: 12px; color: #fff; }
+  .cta-bottom p { color: var(--text2); font-size: 14px; margin-bottom: 24px; }
+
+  /* Footer */
+  .footer {
+    text-align: center; padding: 24px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--text3);
+  }
+  .footer a { color: var(--blue); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- HERO -->
+  <section class="hero">
+    <h1>¿Tu web <span class="hl">pierde clientes</span> y no sabés por qué?</h1>
+    <p>Analizá cualquier sitio <strong>gratis y sin registro</strong>. En 30 segundos tenés una auditoría completa con puntaje, hallazgos críticos y soluciones listas para aplicar.</p>
+    <a href="https://web-analyzer-1-l8uc.onrender.com/" class="btn-go">Analizar mi sitio gratis →</a>
+    <p class="hero-note">Sin registro. Sin costo. Sin compromiso.</p>
+  </section>
+
+  <!-- EXAMPLES -->
+  <section class="examples">
+    <h2>Incluso los más grandes fallan</h2>
+    <p class="sub">Analizamos sitios con millones de visitas. Los resultados hablan solos.</p>
+    <div class="examples-grid">
+      <div class="ex-card" onclick="window.open('https://web-analyzer-1-l8uc.onrender.com/?analyze_url=www.cariverplate.com.ar','_blank')">
+        <div class="ex-top">
+          <div class="ex-badge rojo">3.2</div>
+          <div>
+            <div class="ex-site">cariverplate.com.ar</div>
+            <div class="ex-label">River Plate — Sitio Oficial</div>
+          </div>
+        </div>
+        <div class="ex-scores">
+          <span><span class="dot rojo"></span>SEO 1</span>
+          <span><span class="dot rojo"></span>Accesibilidad 2</span>
+          <span><span class="dot rojo"></span>Rendimiento 3</span>
+          <span><span class="dot rojo"></span>Conversión 4</span>
+          <span><span class="dot amarillo"></span>UX 6</span>
+        </div>
+        <span class="ex-cta">Analizar ahora →</span>
+      </div>
+      <div class="ex-card" onclick="window.open('https://web-analyzer-1-l8uc.onrender.com/?analyze_url=www.ole.com.ar','_blank')">
+        <div class="ex-top">
+          <div class="ex-badge amarillo">6.6</div>
+          <div>
+            <div class="ex-site">ole.com.ar</div>
+            <div class="ex-label">Diario Deportivo Olé</div>
+          </div>
+        </div>
+        <div class="ex-scores">
+          <span><span class="dot amarillo"></span>SEO 6</span>
+          <span><span class="dot amarillo"></span>Accesibilidad 6</span>
+          <span><span class="dot amarillo"></span>Rendimiento 7</span>
+          <span><span class="dot amarillo"></span>Conversión 5</span>
+          <span><span class="dot verde"></span>UX 9</span>
+        </div>
+        <span class="ex-cta">Analizar ahora →</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features">
+    <h2>Qué obtiene tu sitio</h2>
+    <div class="feat-grid">
+      <div class="feat">
+        <div class="feat-icon">📊</div>
+        <h3>Scorecard en 5 categorías</h3>
+        <p>Rendimiento, Accesibilidad, SEO, UX y Conversión con puntaje del 1 al 10.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🔍</div>
+        <h3>Hallazgos críticos</h3>
+        <p>Cada problema detectado con su impacto real en el negocio.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🛠</div>
+        <h3>Soluciones listas</h3>
+        <p>Guías paso a paso y fragmentos de código para corregir cada error.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">📦</div>
+        <h3>Plugin WordPress</h3>
+        <p>Soluciones descargables que aplicás directo en tu sitio sin tocar código.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-bottom">
+    <h2>¿Tu sitio está mejor que el de River?</h2>
+    <p>Descubrilo en 30 segundos. Sin registro. Sin costo.</p>
+    <a href="https://web-analyzer-1-l8uc.onrender.com/" class="btn-go">Analizar gratis ahora →</a>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <a href="mailto:soporte@delmonteanalitica.com">soporte@delmonteanalitica.com</a>
+  </footer>
+
+</div>
+
+</body>
+</html>
