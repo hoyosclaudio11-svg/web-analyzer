@@ -1,110 +1,203 @@
 # Web Analyzer — Contenido para Redes Sociales
-# ============================================
-
-## POST 1 — Apertura (Instagram + Facebook)
-
-**Imagen:** Card oscura con el logo "Web Analyzer", puntaje 3.2/10 en rojo gigante,
-y abajo "cariverplate.com.ar — Sitio Oficial de River Plate"
-
-**Texto:**
-El sitio oficial de River Plate sacó 3.2 de 10 en nuestra auditoría web. 😳
-
-Sí, el club más grande de Argentina.
-❌ Sin lazy loading — 99 imágenes cargan juntas
-❌ Sin Open Graph — si compartís no sale imagen
-❌ SEO 1/10 — Google no entiende de qué trata
-❌ 19 scripts bloqueantes
-
-¿Tu sitio está mejor? Descubrilo gratis en 30 segundos.
-Sin registro. Sin costo.
-
-👉 Link en bio
-
-
-## POST 2 — Olé (2 días después)
-
-**Imagen:** Card con el scorecard de Olé (6.6/10), fondo amarillo
-
-**Texto:**
-Auditamos Olé, el diario deportivo más leído de Argentina. Sacó 6.6/10. 🟡
-
-✅ UX 9/10 — bien
-❌ 100 imágenes sin alt text
-❌ Meta description vacía — Google inventa lo que muestra
-❌ Sin formulario de newsletter — millones de visitas, cero emails capturados
-
-Hasta los más grandes pierden clientes por errores técnicos.
-¿Cuánto pierde tu sitio?
-
-👉 Analizalo gratis en el link de la bio
-
-
-## POST 3 — Antes/Después (4 días después)
-
-**Imagen:** Split screen: izquierda puntaje 5.2 con etiqueta "Antes", derecha 9.6 con "Después"
-
-**Texto:**
-Así mejoró uno de nuestros usuarios en 24 horas. 📈
-
-5.2 → 9.6 con soluciones que se aplican en minutos:
-✅ Lazy loading activado
-✅ Meta tags corregidos
-✅ Imágenes optimizadas
-✅ Formularios con labels
-
-No necesitás ser programador. Las soluciones vienen listas para copiar y pegar.
-
-👉 Auditá tu sitio gratis
-
-
-## POST 4 — Educativo: ¿Qué mide el scorecard? (6 días después)
-
-**Imagen:** Infografía con las 5 categorías y emojis
-
-**Texto:**
-5 cosas que tu sitio debería tener (y probablemente no tiene):
-
-🔴 Rendimiento — ¿Carga en menos de 2 segundos?
-🔴 Accesibilidad — ¿Un ciego puede usar tu sitio?
-🔴 SEO — ¿Google entiende de qué trata?
-🔴 UX — ¿El visitante encuentra lo que busca?
-🔴 Conversión — ¿Tu web vende o solo es una foto linda?
-
-La mayoría falla en 3 o más.
-Descubrí la tuya en 30 segundos. Gratis.
-
-
-## POST 5 — Testimonio (8 días después)
-
-**Imagen:** Quote card con fondo azul oscuro
-
-**Texto:**
-"Tenía el sitio hace 2 años y no sabía por qué no vendía. El análisis me mostró 12 errores que arreglé en una tarde. Ahora carga en 1.2 segundos y los formularios funcionan." — Cliente Web Analyzer
-
-Tu sitio también puede mejorar.
-👉 Link en bio
-
-
-## HISTORIAS (Stories) — Para mantener engagement
-
-- **Lunes:** "El sitio de [equipo] sacó X/10. ¿El tuyo?" (encuesta con 2 opciones: Mejor / Peor)
-- **Miércoles:** "3 errores que matan tu SEO" (slide con texto)
-- **Viernes:** Caso real con antes/después (imagen + música)
-
-
-## IDEAS DE CONTENIDO SEMANAL
-
-- **Lunes Score:** Analizamos un sitio famoso y mostramos resultados
-- **Miércoles Tips:** Un error común y cómo arreglarlo
-- **Viernes Caso real:** Antes/después de un cliente
+# =============================================
+# Imágenes en: social-images/
+# Landing: https://hoyosclaudio11-svg.github.io/web-analyzer/
+# App: https://web-analyzer-1-l8uc.onrender.com/
 
 ---
 
-## NOTAS PARA LAS IMÁGENES
+## CALENDARIO SEMANAL (publicar cada 2 días)
 
-Usar siempre:
-- Fondo oscuro (#0d1117) con borde sutil
-- Números grandes en la fuente del sistema (bold)
-- Colores: rojo #f85149, amarillo #d29922, verde #3fb950, azul #58a6ff
-- Logo "Web Analyzer" en la esquina inferior
-- Sin emojis en las imágenes (solo en texto)
+| Día | Imagen | Tema |
+|-----|--------|------|
+| Lunes | 1-river.png | River Plate 3.2/10 |
+| Miércoles | 2-onepiece.png | One Piece 4.0/10 |
+| Viernes | 3-yahoo.png | Yahoo 4.8/10 |
+| Lunes | 4-boca.png | Boca Juniors 6.0/10 |
+| Miércoles | 5-ole.png | Olé 6.6/10 |
+| Viernes | ba-riverplate.png | Antes/Después WordPress |
+| Lunes | ba-albiceleste.png | Antes/Después WordPress |
+| Miércoles | ba-espectaculos.png | Antes/Después WordPress |
+
+---
+
+## POST 1 — River Plate (Lunes)
+**Imagen:** social-images/1-river.png
+
+**Texto:**
+El sitio oficial de River Plate sacó 3.2 de 10 en nuestra auditoría. 😳
+
+El club más grande del país:
+🔴 SEO 1 — Google no entiende de qué trata
+🔴 Accesibilidad 2 — lectores de pantalla no pueden usarlo
+🔴 Rendimiento 3 — 99 imágenes cargan juntas
+🔴 Conversión 4 — cero captura de emails
+
+Todos fallan en algo. ¿Tu sitio está mejor?
+Analizalo gratis en 30 segundos. Sin registro.
+
+👉 Link en bio
+
+**Hashtags:** #RiverPlate #WebPerformance #SEO #MarketingDigital #WordPress
+
+
+## POST 2 — One Piece (Miércoles)
+**Imagen:** social-images/2-onepiece.png
+
+**Texto:**
+Auditamos el sitio oficial de One Piece en Japón. Sacó 4.0/10. 🏴‍☠️
+
+🔴 UX 4 — ni siquiera es responsive en móvil
+🔴 Accesibilidad 2 — 83 imágenes sin descripción
+🟡 SEO 5 — el título es muy corto
+
+El anime más visto del mundo… y su web no pasa una auditoría básica.
+
+¿Cuánto saca la tuya? 30 segundos, sin registro.
+👉 Link en bio
+
+**Hashtags:** #OnePiece #DesarrolloWeb #WebDesign #AuditoríaWeb
+
+
+## POST 3 — Yahoo (Viernes)
+**Imagen:** social-images/3-yahoo.png
+
+**Texto:**
+YAHOO. Sí, el gigante de internet. 4.8/10. 🤯
+
+🟡 UX 7 — lo mejorcito
+🔴 SEO 4 — sin Open Graph, sin Twitter Card
+🔴 Accesibilidad 3 — falta H1 en toda la página
+🔴 Conversión 4 — sin elementos de confianza
+
+153 scripts en una sola página. ¿Hace falta decir más?
+
+Si Yahoo tiene estos problemas, tu sitio también.
+Auditalo gratis → link en bio
+
+**Hashtags:** #Yahoo #WebDev #SEO #Performance #TechNews
+
+
+## POST 4 — Boca Juniors (Lunes)
+**Imagen:** social-images/4-boca.png
+
+**Texto:**
+Boca Juniors: 6.0/10. El clásico eterno también en web. ⚔️
+
+🟢 UX 10 — impecable
+🟡 SEO 7 — bastante bien
+🔴 Accesibilidad 4 — 142 imágenes sin alt text
+🔴 Rendimiento 4 — 12 scripts bloqueantes
+
+River: 3.2 | Boca: 6.0
+En la cancha compiten. En la web, ganó Boca.
+
+¿Tu web contra la de tu competencia?
+👉 Analizala gratis
+
+**Hashtags:** #BocaJuniors #RiverVsBoca #WebAnalytics #SEO #Marketing
+
+
+## POST 5 — Olé (Miércoles)
+**Imagen:** social-images/5-ole.png
+
+**Texto:**
+El diario deportivo más leído de Argentina: 6.6/10. 🟡
+
+🟢 UX 9 — bien
+🟡 SEO 6, Rendimiento 7 — ok
+🔴 100 imágenes sin alt text
+🔴 Meta description vacía
+
+Millones de visitas por mes, pero Google muestra cualquier cosa cuando buscás "Olé".
+
+Lo técnico importa. Descubrí qué frena a tu sitio.
+👉 Link en bio
+
+**Hashtags:** #Olé #DiarioDeportivo #SEO #WebPerformance #Argentina
+
+
+## POST 6 — Caso real: RiverPlate Info (Viernes)
+**Imagen:** social-images/ba-riverplate.png
+
+**Texto:**
+Así mejoramos un sitio WordPress real. 📈
+
+ANTES: 5.5/10 🔴
+DESPUÉS: 9.6/10 🟢
+
+En un solo día, solo aplicando:
+✅ Lazy loading en imágenes
+✅ Meta tags corregidos
+✅ Imágenes WebP
+✅ Alt text en todas las fotos
+
+Sin tocar código. Soluciones paso a paso.
+
+¿Cuánto puede mejorar tu sitio?
+👉 Auditá gratis en 30 segundos
+
+**Hashtags:** #WordPress #OptimizaciónWeb #CasoDeÉxito #WebDev #SEO
+
+
+## POST 7 — Caso real: Diario Albiceleste (Lunes)
+**Imagen:** social-images/ba-albiceleste.png
+
+**Texto:**
+Otro WordPress real optimizado con Web Analyzer. 📈
+
+5.8 → 9.6 en horas.
+
+Lo que arreglamos:
+✅ Lazy loading
+✅ Open Graph tags (ahora comparte con imagen en WhatsApp)
+✅ Imágenes WebP
+✅ Formularios de captura
+
+Cada visita que se iba sin dejar email… ahora se suscribe.
+
+Tu sitio puede hacer lo mismo. 30 segundos, sin costo.
+👉 Link en bio
+
+**Hashtags:** #WordPress #ConversiónWeb #MarketingDigital #SEO
+
+
+## POST 8 — Caso real: Revista Espectáculos (Miércoles)
+**Imagen:** social-images/ba-espectaculos.png
+
+**Texto:**
+Tercer WordPress que pasa de ~6 a 9.6. 🚀
+
+✅ Lazy loading
+✅ SEO técnico
+✅ WebP
+✅ CTAs claros
+
+Tres sitios, mismo patrón: problemas fáciles de arreglar, resultados enormes.
+
+El 90% de los sitios tienen errores básicos.
+El tuyo probablemente también.
+
+👉 Analizalo gratis — link en bio
+
+**Hashtags:** #OptimizaciónWeb #WordPress #AuditoríaWeb #CrecimientoDigital
+
+
+## STORIES (Historias)
+
+- **Lunes:** Imagen 1-river.png recortada cuadrada + encuesta: "¿Tu sitio está mejor que el de River? Sí / No"
+- **Miércoles:** Slide con 3 errores comunes: "Sin lazy loading", "Sin Open Graph", "Sin alt text"
+- **Viernes:** Antes/Después en 2 slides + sticker de "Preguntame"
+- **Fines de semana:** Reposteos de los posts principales
+
+
+## CÓMO PROGRAMAR EN META BUSINESS SUITE
+
+1. Entrá a https://business.facebook.com/
+2. Seleccioná tu página de Facebook e Instagram vinculada
+3. Click en "Crear publicación" → "Programar"
+4. Subí la imagen, pegá el texto, elegí fecha y hora
+5. Activá "Publicar también en Instagram"
+6. Click en "Programar"
+
+Repetí para cada post. Podés programar toda la semana en 15 minutos.
