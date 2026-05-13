@@ -58,7 +58,8 @@ limiter = Limiter(
 
 API_KEY = os.environ.get("ANALYZER_API_KEY", "")
 MP_ACCESS_TOKEN = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "")
-PRICE_ARS = int(os.environ.get("PRICE_ARS", "1000"))  # Precio en ARS, default $10 para pruebas
+MP_WEBHOOK_SECRET = os.environ.get("MERCADOPAGO_WEBHOOK_SECRET", "")
+PRICE_ARS = int(os.environ.get("PRICE_ARS", "1000"))
 MP_SANDBOX = os.environ.get("MERCADOPAGO_SANDBOX", "false").lower() == "true"
 
 logging.basicConfig(
@@ -300,13 +301,42 @@ def api_create_preference():
         return jsonify({"error": str(e)}), 500
 
 
+def _validar_firma_mp() -> bool:
+    """Valida la firma x-signature del webhook de MercadoPago."""
+    if not MP_WEBHOOK_SECRET:
+        return True  # Sin secret configurado, se acepta (ruido en logs)
+    sig = request.headers.get("x-signature", "")
+    if not sig:
+        log.warning("Webhook MP: falta header x-signature")
+        return False
+    try:
+        import hmac
+        parts = dict(p.split("=", 1) for p in sig.split(","))
+        ts = parts.get("ts", "")
+        v1 = parts.get("v1", "")
+        body = request.get_data(as_text=True)
+        expected = hmac.new(
+            MP_WEBHOOK_SECRET.encode(),
+            f"ts={ts}.{body}".encode(),
+            "sha256",
+        ).hexdigest()
+        return hmac.compare_digest(v1, expected)
+    except Exception:
+        log.exception("Error validando firma MP")
+        return False
+
+
 @app.route("/api/mercadopago-webhook", methods=["POST"])
+@limiter.limit("20 per minute")
 def api_mercadopago_webhook():
+    if not _validar_firma_mp():
+        return jsonify({"error": "Firma invalida"}), 403
+
     data = request.get_json(force=True)
-    log.info(f"Webhook MP recibido: {data}")
+    log.info(f"Webhook MP recibido: action={data.get('action', '?')}")
 
     if not MP_ACCESS_TOKEN:
-        log.warning("MERCADOPAGO_ACCESS_TOKEN no configurada — webhook ignorado")
+        log.warning("MERCADOPAGO_ACCESS_TOKEN no configurada")
         return jsonify({"error": "Webhook no configurado"}), 400
 
     payment_id = data.get("data", {}).get("id") or data.get("payment_id")
@@ -323,13 +353,10 @@ def api_mercadopago_webhook():
         user_id = metadata.get("user_id")
         report_hash = metadata.get("report_hash")
 
-        # Fallback: si metadata está vacío, obtener la preferencia asociada
         if not user_id or not report_hash:
+            pref_id = payment.get("preference_id", "")
             order = payment.get("order") or payment.get("merchant_order") or {}
-            if not order:
-                # Buscar en el payment directamente
-                pref_id = payment.get("preference_id", "")
-            else:
+            if not pref_id and order:
                 pref_id = order.get("preference_id", "")
             if pref_id:
                 pref_result = sdk.preference().get(pref_id)
@@ -337,17 +364,15 @@ def api_mercadopago_webhook():
                 pref_meta = pref.get("metadata") or {}
                 user_id = user_id or pref_meta.get("user_id")
                 report_hash = report_hash or pref_meta.get("report_hash")
-                log.info(f"Webhook MP: metadata recuperado de preferencia {pref_id}")
 
         if status == "approved" and user_id and report_hash:
-            purchased = purchase_analysis(int(user_id), report_hash, payment_id)
-            if purchased:
+            if purchase_analysis(int(user_id), report_hash, payment_id):
                 track_event("analysis_purchased", int(user_id), "", report_hash)
-                log.info(f"Usuario {user_id} compro analisis {report_hash} via MP webhook")
+                log.info(f"Usuario {user_id} compro analisis {report_hash} via webhook")
             else:
                 log.info(f"Compra duplicada: user={user_id} report={report_hash}")
         else:
-            log.info(f"Webhook MP payment {payment_id}: status={status}, user_id={user_id}, report_hash={report_hash}")
+            log.info(f"Webhook MP pago {payment_id}: status={status}")
 
     except Exception as e:
         log.exception("Error procesando webhook MP")
