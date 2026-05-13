@@ -262,6 +262,7 @@ def api_create_preference():
             "failure": host + "/",
             "pending": host + "/",
         },
+        "auto_return": "approved",
     }
     # notification_url solo si estamos en producción (Render)
     if "onrender.com" in host:
