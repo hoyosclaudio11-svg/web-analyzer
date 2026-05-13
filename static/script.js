@@ -85,12 +85,22 @@ document.addEventListener('DOMContentLoaded', () => {
       showNotification('¡Pago exitoso! Tus descargas están desbloqueadas.');
     }
     analyze(analyzeUrl).then(() => {
-      // Limpiar query string de la URL sin recargar
       window.history.replaceState({}, '', '/');
     });
   } else {
     input.focus();
   }
+
+  // Click en ejemplos reales
+  $$('.example-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const url = card.getAttribute('data-url');
+      if (!url) return;
+      input.value = url;
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      analyze(url);
+    });
+  });
 });
 
 // =============================================================================
