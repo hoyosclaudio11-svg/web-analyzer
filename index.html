@@ -4,9 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Web Analyzer — Auditoría de sitios web en 30 segundos</title>
-<meta name="description" content="Analizá cualquier sitio gratis y sin registro. Descubrí qué frena a tu web en 5 categorías: Rendimiento, SEO, Accesibilidad, UX y Conversión.">
+<meta name="description" content="Analizá cualquier sitio gratis y sin registro. Descubrí qué frena a tu web en 5 categorías. Incluso Yahoo, River, Boca y One Piece fallan.">
 <meta property="og:title" content="Web Analyzer — ¿Tu web pierde clientes?">
-<meta property="og:description" content="Auditoría gratuita en 30 segundos. Incluso los sitios más grandes tienen problemas.">
+<meta property="og:description" content="Auditoría gratuita en 30 segundos. Yahoo sacó 4.8, River 3.2, Boca 6.0. ¿Tu sitio?">
+<meta property="og:image" content="https://web-analyzer-1-l8uc.onrender.com/static/og-image.png">
 <style>
   :root {
     --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
@@ -22,62 +23,88 @@
   .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
 
   /* Hero */
-  .hero { text-align: center; padding: 72px 16px 48px; }
+  .hero { text-align: center; padding: 64px 16px 40px; }
   .hero h1 { font-size: 40px; font-weight: 800; color: #fff; letter-spacing: -0.5px; margin-bottom: 16px; line-height: 1.2; }
   .hero h1 .hl { color: var(--red); }
-  .hero p { font-size: 16px; color: var(--text2); max-width: 600px; margin: 0 auto 32px; line-height: 1.7; }
+  .hero p { font-size: 16px; color: var(--text2); max-width: 620px; margin: 0 auto 28px; line-height: 1.7; }
   .btn-go {
     display: inline-block; padding: 16px 40px; background: var(--accent); color: #fff;
     border: none; border-radius: var(--radius); font-size: 17px; font-weight: 700;
     text-decoration: none; cursor: pointer; transition: background 0.15s, transform 0.1s;
   }
   .btn-go:hover { background: #388bfd; transform: scale(1.02); }
-  .hero-note { font-size: 11px; color: var(--text3); margin-top: 12px; }
+  .hero-note { font-size: 11px; color: var(--text3); margin-top: 10px; }
 
-  /* Examples */
-  .examples { padding: 24px 0 56px; }
-  .examples h2 { text-align: center; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); margin-bottom: 4px; }
-  .examples .sub { text-align: center; font-size: 12px; color: var(--text3); margin-bottom: 20px; }
-  .examples-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 760px; margin: 0 auto; }
+  /* Section titles */
+  .sec-title { text-align: center; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); margin-bottom: 4px; }
+  .sec-sub { text-align: center; font-size: 12px; color: var(--text3); margin-bottom: 20px; }
+
+  /* Examples Grid — 2 columns */
+  .examples { padding: 24px 0 10px; }
+  .examples-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 800px; margin: 0 auto; }
   @media (max-width: 600px) { .examples-grid { grid-template-columns: 1fr; } }
+
   .ex-card {
     background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 20px; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+    padding: 16px; cursor: pointer; transition: border-color 0.2s, background 0.2s;
   }
   .ex-card:hover { border-color: var(--blue); }
-  .ex-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .ex-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .ex-badge {
-    width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center;
-    justify-content: center; font-size: 18px; font-weight: 800; flex-shrink: 0; color: #000;
+    width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 16px; font-weight: 800; flex-shrink: 0; color: #000;
   }
   .ex-badge.rojo { background: var(--red); }
   .ex-badge.amarillo { background: var(--yellow); }
-  .ex-site { font-family: monospace; font-size: 14px; color: var(--blue); font-weight: 600; }
-  .ex-label { font-size: 11px; color: var(--text3); margin-top: 2px; }
-  .ex-scores { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-  .ex-scores span { font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 4px; }
-  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .ex-badge.verde { background: var(--green); }
+  .ex-site { font-family: monospace; font-size: 13px; color: var(--blue); font-weight: 600; }
+  .ex-label { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .ex-scores { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .ex-scores span { font-size: 10px; color: var(--text2); display: flex; align-items: center; gap: 3px; }
+  .dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
   .dot.rojo { background: var(--red); }
   .dot.amarillo { background: var(--yellow); }
   .dot.verde { background: var(--green); }
-  .ex-cta { color: var(--blue); font-size: 12px; font-weight: 600; }
+  .ex-cta { color: var(--blue); font-size: 11px; font-weight: 600; }
+
+  /* Before/After Section */
+  .before-after { padding: 48px 0; border-top: 1px solid var(--border); }
+  .ba-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; max-width: 800px; margin: 0 auto; }
+  @media (max-width: 700px) { .ba-grid { grid-template-columns: 1fr; } }
+  .ba-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px; text-align: center;
+  }
+  .ba-site { font-family: monospace; font-size: 12px; color: var(--blue); font-weight: 600; margin-bottom: 10px; word-break: break-all; }
+  .ba-scores { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px; }
+  .ba-before { font-size: 28px; font-weight: 700; color: var(--red); }
+  .ba-arrow { font-size: 20px; color: var(--text3); }
+  .ba-after { font-size: 28px; font-weight: 700; color: var(--green); }
+  .ba-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text3); }
+  .ba-pills { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 10px; }
+  .ba-pill { font-size: 9px; padding: 2px 7px; border-radius: 8px; border: 1px solid var(--border); color: var(--text3); }
+
+  /* Stats bar */
+  .stats-bar { text-align: center; padding: 32px 0; border-top: 1px solid var(--border); }
+  .stats-bar h2 { font-size: 22px; font-weight: 700; margin-bottom: 4px; color: #fff; }
+  .stats-bar p { color: var(--text2); font-size: 14px; margin-bottom: 0; }
 
   /* Features */
-  .features { padding: 56px 0; border-top: 1px solid var(--border); }
-  .features h2 { text-align: center; font-size: 22px; font-weight: 700; margin-bottom: 32px; color: #fff; }
+  .features { padding: 48px 0; border-top: 1px solid var(--border); }
+  .features h2 { text-align: center; font-size: 20px; font-weight: 700; margin-bottom: 28px; color: #fff; }
   .feat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; max-width: 760px; margin: 0 auto; }
   .feat {
     background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 20px; text-align: center;
   }
-  .feat-icon { font-size: 28px; margin-bottom: 10px; }
+  .feat-icon { font-size: 28px; margin-bottom: 8px; }
   .feat h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
   .feat p { font-size: 12px; color: var(--text3); line-height: 1.5; }
 
   /* CTA bottom */
-  .cta-bottom { text-align: center; padding: 48px 16px; border-top: 1px solid var(--border); }
-  .cta-bottom h2 { font-size: 22px; font-weight: 700; margin-bottom: 12px; color: #fff; }
-  .cta-bottom p { color: var(--text2); font-size: 14px; margin-bottom: 24px; }
+  .cta-bottom { text-align: center; padding: 44px 16px; border-top: 1px solid var(--border); }
+  .cta-bottom h2 { font-size: 22px; font-weight: 700; margin-bottom: 10px; color: #fff; }
+  .cta-bottom p { color: var(--text2); font-size: 14px; margin-bottom: 22px; }
 
   /* Footer */
   .footer {
@@ -99,11 +126,13 @@
     <p class="hero-note">Sin registro. Sin costo. Sin compromiso.</p>
   </section>
 
-  <!-- EXAMPLES -->
+  <!-- EXAMPLES — Sitios famosos -->
   <section class="examples">
-    <h2>Incluso los más grandes fallan</h2>
-    <p class="sub">Analizamos sitios con millones de visitas. Los resultados hablan solos.</p>
+    <h2 class="sec-title">Incluso los más grandes fallan</h2>
+    <p class="sec-sub">Analizamos sitios con millones de visitas. Los resultados hablan solos.</p>
     <div class="examples-grid">
+
+      <!-- River Plate -->
       <div class="ex-card" onclick="window.open('https://web-analyzer-1-l8uc.onrender.com/?analyze_url=www.cariverplate.com.ar','_blank')">
         <div class="ex-top">
           <div class="ex-badge rojo">3.2</div>
@@ -114,13 +143,72 @@
         </div>
         <div class="ex-scores">
           <span><span class="dot rojo"></span>SEO 1</span>
-          <span><span class="dot rojo"></span>Accesibilidad 2</span>
-          <span><span class="dot rojo"></span>Rendimiento 3</span>
-          <span><span class="dot rojo"></span>Conversión 4</span>
+          <span><span class="dot rojo"></span>Acces. 2</span>
+          <span><span class="dot rojo"></span>Rend. 3</span>
+          <span><span class="dot rojo"></span>Conv. 4</span>
           <span><span class="dot amarillo"></span>UX 6</span>
         </div>
         <span class="ex-cta">Analizar ahora →</span>
       </div>
+
+      <!-- One Piece -->
+      <div class="ex-card" onclick="window.open('https://web-analyzer-1-l8uc.onrender.com/?analyze_url=one-piece.com','_blank')">
+        <div class="ex-top">
+          <div class="ex-badge rojo">4.0</div>
+          <div>
+            <div class="ex-site">one-piece.com</div>
+            <div class="ex-label">One Piece — Sitio Oficial (Japón)</div>
+          </div>
+        </div>
+        <div class="ex-scores">
+          <span><span class="dot rojo"></span>SEO 5</span>
+          <span><span class="dot rojo"></span>Acces. 2</span>
+          <span><span class="dot amarillo"></span>Rend. 5</span>
+          <span><span class="dot rojo"></span>Conv. 4</span>
+          <span><span class="dot rojo"></span>UX 4</span>
+        </div>
+        <span class="ex-cta">Analizar ahora →</span>
+      </div>
+
+      <!-- Yahoo -->
+      <div class="ex-card" onclick="window.open('https://web-analyzer-1-l8uc.onrender.com/?analyze_url=yahoo.com','_blank')">
+        <div class="ex-top">
+          <div class="ex-badge rojo">4.8</div>
+          <div>
+            <div class="ex-site">yahoo.com</div>
+            <div class="ex-label">Yahoo — Portal #1 de noticias USA</div>
+          </div>
+        </div>
+        <div class="ex-scores">
+          <span><span class="dot rojo"></span>SEO 4</span>
+          <span><span class="dot rojo"></span>Acces. 3</span>
+          <span><span class="dot amarillo"></span>Rend. 6</span>
+          <span><span class="dot rojo"></span>Conv. 4</span>
+          <span><span class="dot amarillo"></span>UX 7</span>
+        </div>
+        <span class="ex-cta">Analizar ahora →</span>
+      </div>
+
+      <!-- Boca Juniors -->
+      <div class="ex-card" onclick="window.open('https://web-analyzer-1-l8uc.onrender.com/?analyze_url=www.bocajuniors.com.ar','_blank')">
+        <div class="ex-top">
+          <div class="ex-badge amarillo">6.0</div>
+          <div>
+            <div class="ex-site">bocajuniors.com.ar</div>
+            <div class="ex-label">Boca Juniors — Sitio Oficial</div>
+          </div>
+        </div>
+        <div class="ex-scores">
+          <span><span class="dot amarillo"></span>SEO 7</span>
+          <span><span class="dot rojo"></span>Acces. 4</span>
+          <span><span class="dot rojo"></span>Rend. 4</span>
+          <span><span class="dot amarillo"></span>Conv. 5</span>
+          <span><span class="dot verde"></span>UX 10</span>
+        </div>
+        <span class="ex-cta">Analizar ahora →</span>
+      </div>
+
+      <!-- Olé -->
       <div class="ex-card" onclick="window.open('https://web-analyzer-1-l8uc.onrender.com/?analyze_url=www.ole.com.ar','_blank')">
         <div class="ex-top">
           <div class="ex-badge amarillo">6.6</div>
@@ -131,14 +219,78 @@
         </div>
         <div class="ex-scores">
           <span><span class="dot amarillo"></span>SEO 6</span>
-          <span><span class="dot amarillo"></span>Accesibilidad 6</span>
-          <span><span class="dot amarillo"></span>Rendimiento 7</span>
-          <span><span class="dot amarillo"></span>Conversión 5</span>
+          <span><span class="dot amarillo"></span>Acces. 6</span>
+          <span><span class="dot amarillo"></span>Rend. 7</span>
+          <span><span class="dot amarillo"></span>Conv. 5</span>
           <span><span class="dot verde"></span>UX 9</span>
         </div>
         <span class="ex-cta">Analizar ahora →</span>
       </div>
+
     </div>
+  </section>
+
+  <!-- BEFORE / AFTER — Resultados reales -->
+  <section class="before-after">
+    <h2 class="sec-title">Antes y después con Web Analyzer</h2>
+    <p class="sec-sub">Tres sitios WordPress reales optimizados con nuestras soluciones.</p>
+    <div class="ba-grid">
+
+      <div class="ba-card">
+        <div class="ba-site">riverplate-info.com.ar</div>
+        <div class="ba-scores">
+          <span class="ba-before">5.5</span>
+          <span class="ba-arrow">→</span>
+          <span class="ba-after">9.6</span>
+        </div>
+        <div class="ba-label">Antes → Después</div>
+        <div class="ba-pills">
+          <span class="ba-pill">lazy loading</span>
+          <span class="ba-pill">meta tags</span>
+          <span class="ba-pill">WebP</span>
+          <span class="ba-pill">alt text</span>
+        </div>
+      </div>
+
+      <div class="ba-card">
+        <div class="ba-site">diario-albiceleste.com.ar</div>
+        <div class="ba-scores">
+          <span class="ba-before">5.8</span>
+          <span class="ba-arrow">→</span>
+          <span class="ba-after">9.6</span>
+        </div>
+        <div class="ba-label">Antes → Después</div>
+        <div class="ba-pills">
+          <span class="ba-pill">lazy loading</span>
+          <span class="ba-pill">OG tags</span>
+          <span class="ba-pill">WebP</span>
+          <span class="ba-pill">formularios</span>
+        </div>
+      </div>
+
+      <div class="ba-card">
+        <div class="ba-site">revista-espectaculos.com.ar</div>
+        <div class="ba-scores">
+          <span class="ba-before">6.0</span>
+          <span class="ba-arrow">→</span>
+          <span class="ba-after">9.6</span>
+        </div>
+        <div class="ba-label">Antes → Después</div>
+        <div class="ba-pills">
+          <span class="ba-pill">lazy loading</span>
+          <span class="ba-pill">SEO</span>
+          <span class="ba-pill">WebP</span>
+          <span class="ba-pill">CTAs</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section class="stats-bar">
+    <h2>+5.000 páginas analizadas</h2>
+    <p>Sitios WordPress, Shopify, Wix y hechos a mano. Todos tienen algo que mejorar.</p>
   </section>
 
   <!-- FEATURES -->
