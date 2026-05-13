@@ -27,9 +27,14 @@ if PG:
     import psycopg2
     import psycopg2.extras
 
+    # Limpiar parámetros que psycopg2 no reconoce
+    _PG_URL = DATABASE_URL
+    for _bad in ("channel_binding",):
+        _PG_URL = _PG_URL.replace(f"&{_bad}=require", "").replace(f"?{_bad}=require&", "?")
+
     def _conn():
         if not hasattr(_local, "db"):
-            _local.db = psycopg2.connect(DATABASE_URL, sslmode="require")
+            _local.db = psycopg2.connect(_PG_URL)
             _local.db.cursor_factory = psycopg2.extras.RealDictCursor
         return _local.db
 
