@@ -244,6 +244,9 @@ def api_create_preference():
         return jsonify({"error": "report_hash requerido"}), 400
 
     host = request.host_url.rstrip("/")
+    # En Render, Flask ve HTTP interno pero la URL pública es HTTPS
+    if "onrender.com" in host:
+        host = host.replace("http://", "https://")
 
     preference_data = {
         "items": [{
