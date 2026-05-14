@@ -32,10 +32,46 @@ if PG:
     for _bad in ("channel_binding",):
         _PG_URL = _PG_URL.replace(f"&{_bad}=require", "").replace(f"?{_bad}=require&", "?")
 
+    class _PGCursor:
+        """Wrapper que expone execute/fetchone/fetchall/commit/rollback
+        sobre un cursor de psycopg2, para mantener compatibilidad con la
+        API de sqlite3.Connection que el resto del codigo ya usa."""
+        def __init__(self, conn, cur):
+            self._conn = conn
+            self._cur = cur
+
+        def execute(self, sql, params=None):
+            self._cur.execute(sql, params)
+            return self
+
+        def fetchone(self):
+            return self._cur.fetchone()
+
+        def fetchall(self):
+            return self._cur.fetchall()
+
+        def commit(self):
+            self._conn.commit()
+
+        def rollback(self):
+            self._conn.rollback()
+
+        @property
+        def rowcount(self):
+            return self._cur.rowcount
+
+        @property
+        def lastrowid(self):
+            return None
+
+        def close(self):
+            self._cur.close()
+
     def _conn():
         if not hasattr(_local, "db"):
-            _local.db = psycopg2.connect(_PG_URL)
-            _local.db.cursor_factory = psycopg2.extras.RealDictCursor
+            conn = psycopg2.connect(_PG_URL)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            _local.db = _PGCursor(conn, cur)
         return _local.db
 
     _PLACEHOLDER = "%s"
