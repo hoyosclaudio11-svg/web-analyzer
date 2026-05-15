@@ -403,7 +403,7 @@ function renderResults(data) {
   renderForms(data.forms);
 
   // Mostrar CTA para usuarios anonimos
-  if (!authToken) {
+  if (!currentUser || !currentUser.authenticated) {
     showDemoCTA();
   }
 }

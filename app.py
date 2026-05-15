@@ -481,24 +481,25 @@ def api_analyze():
     else:
         promedio = 0
 
-    # Generar URL compartible
     report_hash = hashlib.sha256(url.encode()).hexdigest()[:12]
-    create_shared_report(report_hash, url, {
-        k: {"puntaje": s, "color": _color(s), "detalles": d}
-        for k, (s, d) in scores.items()
-    }, promedio)
-
-    # Analytics
     user_id = g.current_user["id"] if g.current_user else None
-    if user_id:
-        increment_analyses(user_id)
-        # Actualizar monitoreo si existe
-        update_monitored_score(url, user_id, promedio)
-    track_event("analysis_completed", user_id, url, json.dumps({"promedio": promedio}))
-
-    # Determinar si el usuario compró este análisis
     user_tier = g.current_user["tier"] if g.current_user else "free"
-    purchased = user_id and (user_tier == "paid" or has_purchased(user_id, report_hash))
+
+    # DB operations son best-effort: si fallan, igual devolvemos el análisis
+    try:
+        create_shared_report(report_hash, url, {
+            k: {"puntaje": s, "color": _color(s), "detalles": d}
+            for k, (s, d) in scores.items()
+        }, promedio)
+
+        if user_id:
+            increment_analyses(user_id)
+            update_monitored_score(url, user_id, promedio)
+        track_event("analysis_completed", user_id, url, json.dumps({"promedio": promedio}))
+    except Exception as db_err:
+        log.exception(f"trace={g.trace_id} url={url} Error guardando en DB (análisis igual se entrega)")
+
+    purchased = user_id and (user_tier == "paid" or _has_purchased_safe(user_id, report_hash))
 
     soluciones = resultado.get("soluciones", [])
     soluciones_out = [
@@ -632,8 +633,12 @@ def api_history():
 
 @app.route("/api/stats")
 def api_stats():
-    from database import get_public_stats
-    return jsonify(get_public_stats())
+    try:
+        from database import get_public_stats
+        return jsonify(get_public_stats())
+    except Exception as e:
+        log.exception("Error en /api/stats")
+        return jsonify({"error": "Estadísticas no disponibles", "analyses": 0, "pages": 0, "users": 0}), 200
 
 
 @app.route("/api/health")
@@ -647,6 +652,13 @@ def api_health():
 # =============================================================================
 # Helpers
 # =============================================================================
+
+
+def _has_purchased_safe(user_id, report_hash):
+    try:
+        return has_purchased(user_id, report_hash)
+    except Exception:
+        return False
 
 
 def _color(score):
