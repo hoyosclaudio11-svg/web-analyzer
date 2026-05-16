@@ -981,6 +981,18 @@ function {safe_domain}_og_tags() {{
         echo '<meta property="og:image" content="' . esc_url($logo[0]) . '">' . "\\n";
     }} elseif (has_site_icon()) {{
         echo '<meta property="og:image" content="' . esc_url(get_site_icon_url(512)) . '">' . "\\n";
+    }} else {{
+        // Fallback: primera imagen del contenido de la home
+        $front_id = get_option('page_on_front');
+        $front_content = $front_id ? get_post_field('post_content', $front_id) : '';
+        if ($front_content && preg_match('/<img[^>]+src=["\\']([^"\\'>]+)/i', $front_content, $img_m)) {{
+            echo '<meta property="og:image" content="' . esc_url($img_m[1]) . '">' . "\\n";
+        }} else {{
+            $default_logo = get_theme_mod('custom_logo') ? wp_get_attachment_image_src(get_theme_mod('custom_logo'), 'full') : null;
+            if ($default_logo) {{
+                echo '<meta property="og:image" content="' . esc_url($default_logo[0]) . '">' . "\\n";
+            }}
+        }}
     }}
     echo '<meta property="og:type" content="' . (is_single() ? 'article' : 'website') . '">' . "\\n";
     echo '<meta property="og:site_name" content="' . esc_attr(get_bloginfo('name')) . '">' . "\\n";
@@ -1037,13 +1049,25 @@ function {safe_domain}_optimize_output($html) {{
             $html = str_replace($old, '<title>' . esc_html($text) . '</title>', $html);
         }}
     }}
-    // 5c. Si no hay H1, agregarlo (oculto visualmente, visible para SEO)
+    // 5c. Asegurar exactamente 1 H1 (ni 0, ni 2+)
     if (!preg_match('/<h1[\s>]/i', $html)) {{
         $site_name = get_bloginfo('name');
         $h1_tag = '<h1 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">' . esc_html($site_name) . '</h1>';
-        $html = preg_replace('/<body[^>]*>/i', '$0' . "\\n" . $h1_tag, $html, 1);
+        $html = preg_replace('/<body[^>]*>/i', '$0' . "\n" . $h1_tag, $html, 1);
+    }} elseif (preg_match_all('/<h1[\s>]/i', $html, $m) > 1) {{
+        // Hay multiples H1: conservar primero, convertir extras a h2
+        $seen = false;
+        $html = preg_replace_callback('/<h1([\s>])/i', function($m) use (&$seen) {{
+            if (!$seen) {{ $seen = true; return $m[0]; }}
+            return '<h2' . $m[1];
+        }}, $html);
+        $html = preg_replace_callback('/<\/h1>/i', function($m) use (&$seen) {{
+            static $count = 0; $count++;
+            if ($count <= 1) {{ return $m[0]; }}
+            return '</h2>';
+        }}, $html);
     }}
-    // 5d. Lazy loading en todas las imágenes
+    // 5d. Lazy loading en todas las imagenes
     $html = preg_replace('/<img(?!.*loading=)(.*?)>/i', '<img$1 loading="lazy">', $html);
     return $html;
 }}
