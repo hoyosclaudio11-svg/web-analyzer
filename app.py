@@ -163,7 +163,11 @@ def features_page():
 @app.route("/r/<report_id>")
 def shared_report(report_id):
     """Scorecard público compartible."""
-    report = get_shared_report(report_id)
+    try:
+        report = get_shared_report(report_id)
+    except Exception:
+        log.exception(f"Error cargando reporte {report_id}")
+        report = None
     if not report:
         return render_template("report_404.html"), 404
     return render_template("report.html", report=report)
@@ -558,7 +562,7 @@ def api_download(filename):
     if g.current_user:
         if g.current_user.get("tier") == "paid":
             has_access = True
-        elif report_hash and has_purchased(g.current_user["id"], report_hash):
+        elif report_hash and _has_purchased_safe(g.current_user["id"], report_hash):
             has_access = True
 
     if not has_access:
@@ -577,9 +581,12 @@ def api_download(filename):
         return jsonify({"error": "Archivo no encontrado"}), 404
 
     user_id = g.current_user["id"] if g.current_user else None
-    if user_id:
-        increment_downloads(user_id)
-    track_event("plugin_downloaded", user_id, filename)
+    try:
+        if user_id:
+            increment_downloads(user_id)
+        track_event("plugin_downloaded", user_id, filename)
+    except Exception:
+        log.exception("Error guardando estadísticas de descarga")
 
     return send_file(str(path), as_attachment=True, download_name=safe)
 
