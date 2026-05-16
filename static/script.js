@@ -4,36 +4,18 @@
 const API = '/api/analyze';
 const DOWNLOAD = '/api/download';
 const HISTORY = '/api/history';
-const AUTH_REGISTER = '/api/auth/register';
-const AUTH_LOGIN = '/api/auth/login';
-const AUTH_ME = '/api/auth/me';
-const UPGRADE = '/api/upgrade';
-const MONITOR = '/api/monitor';
 
 const API_KEY = document.querySelector('meta[name="api-key"]')?.content || '';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-// ---------- User state ----------
-let currentUser = null;  // { email, tier, authenticated, analyses_count, downloads_count, purchased_reports }
-let currentReportHash = null;  // hash del último análisis
-let currentPurchased = false;  // si el último análisis fue comprado
-
-function getUserToken() {
-  return localStorage.getItem('wa_token') || '';
-}
-
-function setUserToken(token) {
-  if (token) localStorage.setItem('wa_token', token);
-  else localStorage.removeItem('wa_token');
-}
+// ---------- State ----------
+let currentReportHash = null;
 
 function apiHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   if (API_KEY) headers['Authorization'] = `Bearer ${API_KEY}`;
-  const token = getUserToken();
-  if (token) headers['X-User-Token'] = token;
   return headers;
 }
 
@@ -52,27 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await analyze(url);
   });
 
-  // Botones CTA demo
-  const btnDemoRegister = $('#btn-demo-register');
-  const btnDemoBuy = $('#btn-demo-buy');
-  if (btnDemoRegister) {
-    btnDemoRegister.addEventListener('click', () => {
-      openAuthModal('register');
-      const demoCta = $('#demo-cta');
-      if (demoCta) demoCta.style.display = 'none';
-    });
-  }
-  if (btnDemoBuy) {
-    btnDemoBuy.addEventListener('click', () => {
-      // Redirigir a registro primero, luego a compra
-      openAuthModal('register');
-      const demoCta = $('#demo-cta');
-      if (demoCta) demoCta.style.display = 'none';
-    });
-  }
-
   loadHistory();
-  initAuth();
   loadStats();
 
   // Auto-analizar si el usuario vuelve de un pago exitoso
@@ -163,232 +125,12 @@ async function loadStats() {
 // Auth
 // =============================================================================
 
-async function initAuth() {
-  const token = getUserToken();
-  if (token) {
-    try {
-      const resp = await fetch(AUTH_ME, { headers: apiHeaders() });
-      const data = await resp.json();
-      if (data.authenticated) {
-        currentUser = data;
-      } else {
-        setUserToken('');
-        currentUser = null;
-      }
-    } catch {
-      currentUser = null;
-    }
-  }
-  updateAuthUI();
-  bindAuthEvents();
-  if (currentUser && currentUser.authenticated) {
-    loadMonitored();
-  }
-}
-
-function updateAuthUI() {
-  const tierEl = $('#user-tier');
-  const btnLogin = $('#btn-login');
-  const btnRegister = $('#btn-register');
-  const btnLogout = $('#btn-logout');
-  const banner = $('#upgrade-banner');
-
-  if (currentUser && currentUser.authenticated) {
-    tierEl.textContent = currentUser.tier === 'paid' ? 'PRO' : 'GRATIS';
-    tierEl.className = 'user-tier ' + (currentUser.tier === 'paid' ? 'paid' : 'free');
-    tierEl.style.display = 'inline-block';
-    btnLogin.style.display = 'none';
-    btnRegister.style.display = 'none';
-    btnLogout.style.display = 'inline-block';
-    banner.style.display = 'block';
-    hideDemoCTA();
-  } else {
-    tierEl.style.display = 'none';
-    btnLogin.style.display = 'inline-block';
-    btnRegister.style.display = 'inline-block';
-    btnLogout.style.display = 'none';
-    banner.style.display = 'none';
-  }
-}
-
-function bindAuthEvents() {
-  $('#btn-login').addEventListener('click', (e) => { e.preventDefault(); openAuthModal('login'); });
-  $('#btn-register').addEventListener('click', (e) => { e.preventDefault(); openAuthModal('register'); });
-  $('#btn-logout').addEventListener('click', (e) => { e.preventDefault(); logout(); });
-  $('#switch-to-register').addEventListener('click', (e) => { e.preventDefault(); switchAuthPanel('register'); });
-  $('#switch-to-login').addEventListener('click', (e) => { e.preventDefault(); switchAuthPanel('login'); });
-  $('#modal-close').addEventListener('click', closeAuthModal);
-  $('#auth-modal .modal-overlay').addEventListener('click', closeAuthModal);
-  $('#login-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await login();
-  });
-  $('#register-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await register();
-  });
-  $('#btn-upgrade').addEventListener('click', async () => { await upgrade(); });
-}
-
-function openAuthModal(panel) {
-  switchAuthPanel(panel);
-  $('#auth-modal').style.display = 'flex';
-}
-
-function closeAuthModal() {
-  $('#auth-modal').style.display = 'none';
-}
-
-function switchAuthPanel(panel) {
-  $('#auth-login').style.display = panel === 'login' ? 'block' : 'none';
-  $('#auth-register').style.display = panel === 'register' ? 'block' : 'none';
-}
-
-async function login() {
-  const email = $('#login-email').value.trim();
-  const password = $('#login-pass').value.trim();
-  try {
-    const resp = await fetch(AUTH_LOGIN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) { alert(data.error || 'Error al ingresar'); return; }
-    setUserToken(data.token);
-    currentUser = { email: data.email, tier: data.tier, authenticated: true };
-    closeAuthModal();
-    updateAuthUI();
-    $('#login-pass').value = '';
-  } catch (err) {
-    alert('Error de conexión');
-  }
-}
-
-async function register() {
-  const email = $('#reg-email').value.trim();
-  const password = $('#reg-pass').value.trim();
-  try {
-    const resp = await fetch(AUTH_REGISTER, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) { alert(data.error || 'Error al crear cuenta'); return; }
-    // Auto-login after register: no token returned, so do login
-    const loginResp = await fetch(AUTH_LOGIN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const loginData = await loginResp.json();
-    if (loginResp.ok) {
-      setUserToken(loginData.token);
-      currentUser = { email: loginData.email, tier: loginData.tier, authenticated: true };
-    }
-    closeAuthModal();
-    updateAuthUI();
-    $('#reg-pass').value = '';
-  } catch (err) {
-    alert('Error de conexión');
-  }
-}
-
-function logout() {
-  setUserToken('');
-  currentUser = null;
-  updateAuthUI();
-  hideResults();
-}
-
-async function upgrade() {
-  if (!currentUser || !currentUser.authenticated) {
-    openAuthModal('login');
-    return;
-  }
-  if (!currentReportHash) {
-    alert('Analizá una URL primero antes de comprar.');
-    return;
-  }
-  try {
-    const resp = await fetch('/api/create-preference', {
-      method: 'POST',
-      headers: apiHeaders(),
-      body: JSON.stringify({ report_hash: currentReportHash }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) { alert(data.error || 'Error al crear preferencia de pago'); return; }
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      alert('No se pudo iniciar el pago. Reintentá.');
-    }
-  } catch (err) {
-    alert('Error de conexión');
-  }
-}
-
-async function addMonitor(url, score) {
-  try {
-    const resp = await fetch(MONITOR, {
-      method: 'POST',
-      headers: apiHeaders(),
-      body: JSON.stringify({ url, score }),
-    });
-    const data = await resp.json();
-    if (resp.ok) {
-      $('#status-text').textContent = 'URL en monitoreo';
-    }
-  } catch (err) {
-    // Silencioso
-  }
-}
-
-async function loadMonitored() {
-  if (!currentUser || !currentUser.authenticated) return;
-  try {
-    const resp = await fetch(MONITOR, { headers: apiHeaders() });
-    const data = await resp.json();
-    renderMonitored(data);
-  } catch (err) {
-    // Silencioso
-  }
-}
-
-function renderMonitored(items) {
-  const section = $('#monitored-section');
-  const body = $('#monitored-body');
-  if (!items || !items.length) {
-    if (section) section.style.display = 'none';
-    return;
-  }
-  if (!section) return;
-  section.style.display = 'block';
-  body.innerHTML = items.map(m => `
-    <div class="historial-item">
-      <span class="hist-url">${esc(m.url)}</span>
-      <span class="hist-fecha">Score: ${m.last_score}/10</span>
-      <button class="btn-copy" onclick="deleteMonitor(${m.id})" style="font-size:11px">Quitar</button>
-    </div>`).join('');
-}
-
-async function deleteMonitor(id) {
-  try {
-    await fetch(`${MONITOR}?id=${id}`, { method: 'DELETE', headers: apiHeaders() });
-    loadMonitored();
-  } catch (err) {
-    // Silencioso
-  }
-}
-
 // =============================================================================
 // Render
 // =============================================================================
 
 function renderResults(data) {
   currentReportHash = data.report_hash || null;
-  currentPurchased = data.purchased || false;
   showResults();
   renderScorecard(data.scorecard, data.promedio, data.promedio_color);
   renderShareLink(data.report_url, data.url_final || data.url, data.promedio);
@@ -401,22 +143,6 @@ function renderResults(data) {
   renderImagenes(data.imagenes);
   renderScripts(data.scripts);
   renderForms(data.forms);
-
-  // Mostrar CTA para usuarios anonimos
-  if (!currentUser || !currentUser.authenticated) {
-    showDemoCTA();
-  }
-}
-
-function showDemoCTA() {
-  const cta = $('#demo-cta');
-  if (cta) cta.style.display = 'block';
-  setTimeout(() => { if (cta) cta.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 500);
-}
-
-function hideDemoCTA() {
-  const cta = $('#demo-cta');
-  if (cta) cta.style.display = 'none';
 }
 
 function renderScorecard(scorecard, promedio, color) {
@@ -462,12 +188,10 @@ function renderShareLink(reportUrl, url, promedio) {
     const target = $('#scorecard-promedio');
     target.parentNode.insertBefore(section, target.nextSibling);
   }
-  const authed = currentUser && currentUser.authenticated;
   section.innerHTML = `
     <div class="share-box">
       <span class="share-url">${esc(fullUrl)}</span>
       <button class="btn-copy" data-url="${esc(fullUrl)}">Copiar</button>
-      ${authed && url ? `<button class="btn-copy" id="btn-monitor" style="margin-left:4px">🔔 Monitorear</button>` : ''}
     </div>`;
   section.querySelector('.btn-copy').addEventListener('click', function () {
     const url = this.getAttribute('data-url');
@@ -479,14 +203,6 @@ function renderShareLink(reportUrl, url, promedio) {
       prompt('Copiá esta URL:', url);
     });
   });
-  const btnMonitor = section.querySelector('#btn-monitor');
-  if (btnMonitor) {
-    btnMonitor.addEventListener('click', () => {
-      addMonitor(url, promedio);
-      btnMonitor.textContent = '✅ Monitoreando';
-      btnMonitor.disabled = true;
-    });
-  }
 }
 
 function renderTech(tech) {
@@ -627,23 +343,15 @@ function renderNextSteps(data) {
     ${urgencyHTML}
     <div class="next-steps-list">
       ${steps.map(s => {
-        const locked = !!(s.file && (s.file.bloqueado || s.file.tipo === 'zip' || s.file.tipo === 'json'));
-        const canDownload = currentPurchased || (currentUser && currentUser.tier === 'paid');
         let actionHtml = '';
         if (s.cta && s.file) {
-          if (locked && !canDownload) {
-            actionHtml = `<span class="locked-badge" style="cursor:pointer;margin-top:8px" onclick="document.getElementById('btn-upgrade').click()">ARS 12.000 — Desbloquear descargas</span>`;
-          } else {
-            const dlUrl = '/api/download/' + encodeURIComponent(s.file.nombre);
-            const params = [];
-            if (getUserToken()) params.push('user_token=' + encodeURIComponent(getUserToken()));
-            if (currentReportHash) params.push('report_hash=' + encodeURIComponent(currentReportHash));
-            if (API_KEY) params.push('token=' + encodeURIComponent(API_KEY));
-
-            actionHtml = `<a href="${dlUrl}?${params.join('&')}" class="btn-download step-btn" download>
-                ${s.cta}
-              </a>`;
-          }
+          const dlUrl = '/api/download/' + encodeURIComponent(s.file.nombre);
+          const params = [];
+          if (currentReportHash) params.push('report_hash=' + encodeURIComponent(currentReportHash));
+          if (API_KEY) params.push('token=' + encodeURIComponent(API_KEY));
+          actionHtml = `<a href="${dlUrl}?${params.join('&')}" class="btn-download step-btn" download>
+              ${s.cta}
+            </a>`;
         }
         return `
         <div class="next-step-item">
@@ -664,19 +372,13 @@ function renderSoluciones(soluciones) {
     body.innerHTML = '<p class="empty-text">Sin soluciones generadas.</p>';
     return;
   }
-  const canDownload = currentPurchased || (currentUser && currentUser.tier === 'paid');
-
   body.innerHTML = soluciones.map(s => {
-    const locked = !canDownload && (s.bloqueado || s.tipo === 'zip' || s.tipo === 'json');
     const dlParams = [];
-    if (getUserToken()) dlParams.push('user_token=' + encodeURIComponent(getUserToken()));
     if (currentReportHash) dlParams.push('report_hash=' + encodeURIComponent(currentReportHash));
     if (API_KEY) dlParams.push('token=' + encodeURIComponent(API_KEY));
-    const downloadHtml = locked
-      ? `<span class="locked-badge">ARS 12.000</span>`
-      : `<a href="${DOWNLOAD}/${encodeURIComponent(s.nombre)}?${dlParams.join('&')}" class="btn-download" download>Descargar</a>`;
+    const downloadHtml = `<a href="${DOWNLOAD}/${encodeURIComponent(s.nombre)}?${dlParams.join('&')}" class="btn-download" download>Descargar</a>`;
     return `
-      <div class="solucion-item${locked ? ' locked' : ''}">
+      <div class="solucion-item">
         <div class="sol-type">.${esc(s.tipo)}</div>
         <div class="sol-name">${esc(s.nombre)}</div>
         <div class="sol-desc">${esc(s.descripcion)}</div>

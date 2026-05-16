@@ -17,47 +17,9 @@
       <span class="header-subtitle">&amp; Optimizer</span>
     </div>
     <div class="header-right">
-      <span id="user-tier" class="user-tier" style="display:none"></span>
-      <a id="btn-login" class="btn-auth" href="#" style="display:none">Ingresar</a>
-      <a id="btn-register" class="btn-auth-outline" href="#" style="display:none">Crear cuenta</a>
-      <a id="btn-logout" class="btn-auth" href="#" style="display:none">Salir</a>
       <span id="status-text" class="status-text">Listo</span>
     </div>
   </header>
-
-  <!-- AUTH MODAL -->
-  <div id="auth-modal" class="modal" style="display:none">
-    <div class="modal-overlay"></div>
-    <div class="modal-content">
-      <span class="modal-close" id="modal-close">&times;</span>
-      <div id="auth-login">
-        <h3 style="margin:0 0 16px;color:#fff">Ingresar</h3>
-        <form id="login-form">
-          <input type="email" id="login-email" placeholder="Email" required style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
-          <input type="password" id="login-pass" placeholder="Contraseña" required minlength="6" style="width:100%;padding:10px;margin-bottom:12px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
-          <button type="submit" class="btn-analyze" style="width:100%">Ingresar</button>
-        </form>
-        <p style="font-size:12px;color:#888;margin-top:12px;text-align:center">¿No tenés cuenta? <a href="#" id="switch-to-register" style="color:#58a6ff">Crear una</a></p>
-      </div>
-      <div id="auth-register" style="display:none">
-        <h3 style="margin:0 0 16px;color:#fff">Crear cuenta</h3>
-        <form id="register-form">
-          <input type="email" id="reg-email" placeholder="Email" required style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
-          <input type="password" id="reg-pass" placeholder="Contraseña (mín 6 caracteres)" required minlength="6" style="width:100%;padding:10px;margin-bottom:12px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
-          <button type="submit" class="btn-analyze" style="width:100%">Crear cuenta</button>
-        </form>
-        <p style="font-size:12px;color:#888;margin-top:12px;text-align:center">¿Ya tenés cuenta? <a href="#" id="switch-to-login" style="color:#58a6ff">Ingresar</a></p>
-      </div>
-    </div>
-  </div>
-
-  <!-- UPGRADE BANNER (free users) -->
-  <div id="upgrade-banner" class="upgrade-banner" style="display:none">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-      <span><strong>Descargas bloqueadas</strong> — Comprá este análisis por <strong>ARS 12.000</strong> y descargá todas las soluciones.</span>
-      <button id="btn-upgrade" class="btn-upgrade">Comprar por ARS 12.000</button>
-    </div>
-  </div>
 
   <!-- HERO -->
   <section class="hero-section">
@@ -84,19 +46,6 @@
     </form>
     <p id="input-hint" class="input-hint">Sin registro. Sin costo. Descubrí en 30 segundos qué frena a tu sitio.</p>
   </section>
-
-  <!-- CTA POST-DEMO (anónimo) -->
-  <div id="demo-cta" class="demo-cta" style="display:none">
-    <div class="demo-cta-content">
-      <h3>¿Querés ver las <span style="color:var(--blue)">recomendaciones completas</span> y descargar las soluciones?</h3>
-      <p>Creá tu cuenta gratis en 10 segundos. Sin tarjeta. Sin compromiso.</p>
-      <div class="demo-cta-buttons">
-        <button id="btn-demo-register" class="btn-upgrade">Crear cuenta gratis</button>
-        <span style="color:#888;margin:0 12px">o</span>
-        <button id="btn-demo-buy" class="btn-upgrade" style="background:var(--green)">Comprar por ARS 12.000</button>
-      </div>
-    </div>
-  </div>
 
   <!-- LOADING -->
   <div id="loading" class="loading" style="display:none">
@@ -188,14 +137,6 @@
     <div class="card-header"><span>Historial de análisis</span></div>
     <div id="history-body" class="table-wrap">
       <p class="empty-text">Sin análisis previos.</p>
-    </div>
-  </section>
-
-  <!-- MONITORED URLS -->
-  <section class="card historial-card" id="monitored-section" style="display:none">
-    <div class="card-header"><span>🔔 URLs en monitoreo</span></div>
-    <div id="monitored-body" class="table-wrap">
-      <p class="empty-text">Sin URLs monitoreadas.</p>
     </div>
   </section>
 

@@ -61,6 +61,7 @@ MP_ACCESS_TOKEN = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "")
 MP_WEBHOOK_SECRET = os.environ.get("MERCADOPAGO_WEBHOOK_SECRET", "")
 PRICE_ARS = int(os.environ.get("PRICE_ARS", "1000"))
 MP_SANDBOX = os.environ.get("MERCADOPAGO_SANDBOX", "false").lower() == "true"
+DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -558,8 +559,9 @@ def api_download(filename):
     report_hash = (request.args.get("report_hash") or "").strip()
 
     # Verificar compra: tier 'paid' (legacy) O compró este análisis
-    has_access = False
-    if g.current_user:
+    # En modo desarrollo (local) las descargas están liberadas
+    has_access = DEV_MODE
+    if not has_access and g.current_user:
         if g.current_user.get("tier") == "paid":
             has_access = True
         elif report_hash and _has_purchased_safe(g.current_user["id"], report_hash):
