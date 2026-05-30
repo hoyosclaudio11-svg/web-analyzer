@@ -47,7 +47,13 @@ from database import (
 BASE_DIR = Path(__file__).resolve().parent
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": [
+    "https://webanalyzer.com.ar",
+    "https://www.webanalyzer.com.ar",
+    "https://web-analyzer-1-l8uc.onrender.com",
+    "http://127.0.0.1:5100",
+    "http://localhost:5100",
+]}})
 
 limiter = Limiter(
     get_remote_address,
@@ -59,9 +65,39 @@ limiter = Limiter(
 API_KEY = os.environ.get("ANALYZER_API_KEY", "")
 MP_ACCESS_TOKEN = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "")
 MP_WEBHOOK_SECRET = os.environ.get("MERCADOPAGO_WEBHOOK_SECRET", "")
-PRICE_ARS = int(os.environ.get("PRICE_ARS", "1000"))
+PRICE_ARS = int(os.environ.get("PRICE_ARS", "12000"))
 MP_SANDBOX = os.environ.get("MERCADOPAGO_SANDBOX", "false").lower() == "true"
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
+
+# --- SMTP para correos transaccionales ---
+SMTP_HOST = os.environ.get("SMTP_HOST", "a0110133.ferozo.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+SMTP_USER = os.environ.get("SMTP_USER", "no-reply@webanalyzer.com.ar")
+SMTP_PASS = os.environ.get("SMTP_PASS", "25YmQhbaWJ")
+SMTP_FROM = os.environ.get("SMTP_FROM", "Web Analyzer <no-reply@webanalyzer.com.ar>")
+
+def send_email(to, subject, body):
+    """Envia un correo via SMTP (Ferozo/DonWeb)."""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    msg = MIMEMultipart()
+    msg["From"] = SMTP_FROM
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+
+    try:
+        ctx = __import__("ssl").create_default_context()
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15, context=ctx) as smtp:
+            smtp.login(SMTP_USER, SMTP_PASS)
+            smtp.sendmail(SMTP_USER, to, msg.as_string())
+        log.info(f"Email enviado a {to}: {subject}")
+        return True
+    except Exception as e:
+        log.error(f"Error al enviar email a {to}: {e}")
+        return False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -114,6 +150,11 @@ def check_auth():
             return None
 
     # Sin auth → acceso como invitado (tier free implícito)
+    # Endpoints de descarga requieren autenticación
+    if request.path.startswith("/api/download"):
+        if DEV_MODE:
+            return None
+        return jsonify({"error": "Autenticación requerida", "code": "AUTH_REQUIRED"}), 401
     g.current_user = None
     return None
 
@@ -144,12 +185,12 @@ def log_request(response):
 
 @app.route("/")
 def index():
-    return render_template("index.html", api_key=API_KEY)
+    return render_template("index.html")
 
 
 @app.route("/activar-pro")
 def activar_pro_page():
-    return render_template("activar-pro.html")
+    return render_template("activar-pro.html", dev_mode=DEV_MODE)
 
 @app.route("/faq")
 def faq_page():
@@ -250,8 +291,9 @@ def api_create_preference():
         return jsonify({"error": "report_hash requerido"}), 400
 
     host = request.host_url.rstrip("/")
-    # En Render, Flask ve HTTP interno pero la URL pública es HTTPS
-    if "onrender.com" in host:
+    # En producción detrás de reverse-proxy, Flask ve HTTP pero la URL
+    # pública es HTTPS.  Detectamos vía X-Forwarded-Proto o ausencia de DEV_MODE.
+    if not DEV_MODE or request.headers.get("X-Forwarded-Proto") == "https":
         host = host.replace("http://", "https://")
 
     preference_data = {
@@ -273,8 +315,8 @@ def api_create_preference():
         },
         "auto_return": "approved",
     }
-    # notification_url solo si estamos en producción (Render)
-    if "onrender.com" in host:
+    # notification_url solo en producción (no en desarrollo local)
+    if not DEV_MODE:
         preference_data["notification_url"] = host + "/api/mercadopago-webhook"
 
     try:
@@ -309,7 +351,8 @@ def api_create_preference():
 def _validar_firma_mp() -> bool:
     """Valida la firma x-signature del webhook de MercadoPago."""
     if not MP_WEBHOOK_SECRET:
-        return True  # Sin secret configurado, se acepta (ruido en logs)
+        log.error("MERCADOPAGO_WEBHOOK_SECRET no configurada — webhook rechazado")
+        return False
     sig = request.headers.get("x-signature", "")
     if not sig:
         log.warning("Webhook MP: falta header x-signature")
@@ -389,6 +432,8 @@ def api_mercadopago_webhook():
 @app.route("/api/force-upgrade")
 def api_force_upgrade():
     """Solo para testing — activa PRO manualmente al usuario actual."""
+    if not DEV_MODE:
+        return jsonify({"error": "No disponible en producción"}), 403
     if not g.current_user:
         return jsonify({"error": "Iniciá sesión primero"}), 401
     upgrade_to_paid(g.current_user["id"])
@@ -558,8 +603,12 @@ def api_download(filename):
 
     report_hash = (request.args.get("report_hash") or "").strip()
 
+    ext = os.path.splitext(filename)[1].lower()
+    es_premium = ext in (".zip", ".json")
+
     # Verificar compra: tier 'paid' (legacy) O compró este análisis
     # En modo desarrollo (local) las descargas están liberadas
+    # Solo .zip y .json requieren pago; .html, .md, .liquid son gratis
     has_access = DEV_MODE
     if not has_access and g.current_user:
         if g.current_user.get("tier") == "paid":
@@ -567,7 +616,7 @@ def api_download(filename):
         elif report_hash and _has_purchased_safe(g.current_user["id"], report_hash):
             has_access = True
 
-    if not has_access:
+    if es_premium and not has_access:
         return jsonify({
             "error": "Descarga exclusiva — comprá el análisis por ARS 12.000",
             "action": "purchase",

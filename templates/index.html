@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="api-key" content="{{ api_key }}">
-<title>Web Analyzer & Optimizer</title>
+
+<title>Web Analyzer — Auditoría web gratis en 30 segundos</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -16,61 +16,46 @@
       <span class="header-title">Web<span style="color:var(--blue)">Analyzer</span></span>
       <span class="header-subtitle">&amp; Optimizer</span>
     </div>
-    <div class="header-right">
-      <span id="user-tier" class="user-tier" style="display:none"></span>
-      <a id="btn-login" class="btn-auth" href="#" style="display:none">Ingresar</a>
-      <a id="btn-register" class="btn-auth-outline" href="#" style="display:none">Crear cuenta</a>
-      <a id="btn-logout" class="btn-auth" href="#" style="display:none">Salir</a>
+    <div class="header-right" id="header-right">
       <span id="status-text" class="status-text">Listo</span>
     </div>
   </header>
-
-  <!-- AUTH MODAL -->
-  <div id="auth-modal" class="modal" style="display:none">
-    <div class="modal-overlay"></div>
-    <div class="modal-content">
-      <span class="modal-close" id="modal-close">&times;</span>
-      <div id="auth-login">
-        <h3 style="margin:0 0 16px;color:#fff">Ingresar</h3>
-        <form id="login-form">
-          <input type="email" id="login-email" placeholder="Email" required style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
-          <input type="password" id="login-pass" placeholder="Contraseña" required minlength="6" style="width:100%;padding:10px;margin-bottom:12px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
-          <button type="submit" class="btn-analyze" style="width:100%">Ingresar</button>
-        </form>
-        <p style="font-size:12px;color:#888;margin-top:12px;text-align:center">¿No tenés cuenta? <a href="#" id="switch-to-register" style="color:#58a6ff">Crear una</a></p>
-      </div>
-      <div id="auth-register" style="display:none">
-        <h3 style="margin:0 0 16px;color:#fff">Crear cuenta</h3>
-        <form id="register-form">
-          <input type="email" id="reg-email" placeholder="Email" required style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
-          <input type="password" id="reg-pass" placeholder="Contraseña (mín 6 caracteres)" required minlength="6" style="width:100%;padding:10px;margin-bottom:12px;border:1px solid #333;border-radius:6px;background:#111;color:#fff">
-          <button type="submit" class="btn-analyze" style="width:100%">Crear cuenta</button>
-        </form>
-        <p style="font-size:12px;color:#888;margin-top:12px;text-align:center">¿Ya tenés cuenta? <a href="#" id="switch-to-login" style="color:#58a6ff">Ingresar</a></p>
-      </div>
-    </div>
-  </div>
-
-  <!-- UPGRADE BANNER (free users) -->
-  <div id="upgrade-banner" class="upgrade-banner" style="display:none">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-      <span><strong>Descargas bloqueadas</strong> — Comprá este análisis por <strong>ARS 12.000</strong> y descargá todas las soluciones.</span>
-      <button id="btn-upgrade" class="btn-upgrade">Comprar por ARS 12.000</button>
-    </div>
-  </div>
 
   <!-- HERO -->
   <section class="hero-section">
     <h1 class="hero-title">¿Tu web <span style="color:var(--red)">pierde clientes</span> y no sabés por qué?</h1>
     <p class="hero-desc">Analizá cualquier sitio <strong>gratis y sin registro</strong>. En 30 segundos tenés una auditoría en 5 categorías con puntaje, hallazgos y soluciones que podés descargar como plugin para WordPress.</p>
-    <div class="hero-links">
-      <a href="/features">Qué hace →</a>
-      <a href="/faq">FAQ →</a>
+    <div class="hero-stats" id="hero-stats">
+      <div class="hero-stat"><span class="hero-stat-num" id="stat-analyses">—</span><span class="hero-stat-label">análisis realizados</span></div>
+      <div class="hero-stat"><span class="hero-stat-num" id="stat-pages">—</span><span class="hero-stat-label">páginas auditadas</span></div>
+      <div class="hero-stat"><span class="hero-stat-num">30s</span><span class="hero-stat-label">por diagnóstico</span></div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how-section">
+    <h2 class="section-title">Cómo funciona</h2>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h3>Pegá tu URL</h3>
+        <p>Ingresá la dirección de tu sitio. Sin registro, sin costo. Todo anónimo.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h3>Recibí el diagnóstico</h3>
+        <p>En 30 segundos tenés un scorecard 0-10 con hallazgos, recomendaciones y soluciones.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h3>Descargá e instalá</h3>
+        <p>¿Necesitás corregir los problemas ya? Comprá el análisis PRO por <strong>ARS 12.000</strong> y recibís el plugin .zip que lo arregla solo.</p>
+      </div>
     </div>
   </section>
 
   <!-- INPUT -->
-  <section class="input-section">
+  <section class="input-section" id="input-section">
     <form id="analyze-form" class="analyze-form">
       <div class="url-input-wrap">
         <span class="url-prefix"></span>
@@ -79,24 +64,11 @@
                autocomplete="off" spellcheck="false">
       </div>
       <button type="submit" id="btn-analyze" class="btn-analyze">
-        Analizar gratis
+        Detectar problemas
       </button>
     </form>
     <p id="input-hint" class="input-hint">Sin registro. Sin costo. Descubrí en 30 segundos qué frena a tu sitio.</p>
   </section>
-
-  <!-- CTA POST-DEMO (anónimo) -->
-  <div id="demo-cta" class="demo-cta" style="display:none">
-    <div class="demo-cta-content">
-      <h3>¿Querés ver las <span style="color:var(--blue)">recomendaciones completas</span> y descargar las soluciones?</h3>
-      <p>Creá tu cuenta gratis en 10 segundos. Sin tarjeta. Sin compromiso.</p>
-      <div class="demo-cta-buttons">
-        <button id="btn-demo-register" class="btn-upgrade">Crear cuenta gratis</button>
-        <span style="color:#888;margin:0 12px">o</span>
-        <button id="btn-demo-buy" class="btn-upgrade" style="background:var(--green)">Comprar por ARS 12.000</button>
-      </div>
-    </div>
-  </div>
 
   <!-- LOADING -->
   <div id="loading" class="loading" style="display:none">
@@ -106,6 +78,9 @@
 
   <!-- ERROR -->
   <div id="error-box" class="error-box" style="display:none"></div>
+
+  <!-- UPGRADE BANNER (aparece dentro de resultados via JS) -->
+  <div id="upgrade-banner" class="upgrade-banner" style="display:none"></div>
 
   <!-- RESULTADOS -->
   <div id="results" style="display:none">
@@ -191,20 +166,140 @@
     </div>
   </section>
 
-  <!-- MONITORED URLS -->
-  <section class="card historial-card" id="monitored-section" style="display:none">
-    <div class="card-header"><span>🔔 URLs en monitoreo</span></div>
-    <div id="monitored-body" class="table-wrap">
-      <p class="empty-text">Sin URLs monitoreadas.</p>
+  <!-- FEATURES -->
+  <section class="features-section">
+    <h2 class="section-title">Todo lo que incluye</h2>
+    <p class="section-sub">Diagnóstico automático + soluciones instalables en un solo flujo.</p>
+    <div class="features-grid">
+      <div class="feature-card"><span class="feature-icon">⚡</span><h4>Rendimiento</h4><p>Scripts bloqueantes, lazy loading, defer/async, tamaño de página.</p></div>
+      <div class="feature-card"><span class="feature-icon">🔍</span><h4>SEO</h4><p>Meta tags, Open Graph, canonical, headings, datos estructurados.</p></div>
+      <div class="feature-card"><span class="feature-icon">♿</span><h4>Accesibilidad</h4><p>Alt text, contraste, labels en formularios, estructura de headings.</p></div>
+      <div class="feature-card"><span class="feature-icon">📈</span><h4>Conversión</h4><p>Formularios de captura, CTAs, legibilidad, responsive mobile.</p></div>
+      <div class="feature-card"><span class="feature-icon">📦</span><h4>Plugin WordPress</h4><p>ZIP instalable con correcciones automáticas. Compatible con Yoast y Rank Math.</p></div>
     </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="pricing-section" id="pricing">
+    <h2 class="section-title">Planes</h2>
+    <p class="section-sub">Pago único por análisis. Sin suscripciones. Sin letra chica.</p>
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div class="pricing-header">Gratis</div>
+        <div class="pricing-price">$0</div>
+        <div class="pricing-sub">siempre</div>
+        <ul class="pricing-features">
+          <li>Análisis completo ilimitado</li>
+          <li>Scorecard 0-10 en 5 categorías</li>
+          <li>Hallazgos y recomendaciones</li>
+          <li>Guía SEO en markdown (.md)</li>
+          <li>Link público compartible</li>
+        </ul>
+        <a href="#input-section" class="btn-pricing-outline">Comenzar gratis</a>
+      </div>
+      <div class="pricing-card pricing-pro">
+        <div class="pricing-badge">PRO</div>
+        <div class="pricing-header">PRO</div>
+        <div class="pricing-price">ARS 12.000</div>
+        <div class="pricing-sub">pago único por análisis</div>
+        <ul class="pricing-features">
+          <li>Todo lo del plan Gratis</li>
+          <li>Plugin WordPress (.zip) instalable</li>
+          <li>Archivos HTML corregidos</li>
+          <li>Reporte JSON completo</li>
+          <li>Soporte por email prioritario</li>
+        </ul>
+        <div class="trust-seal" style="font-size:12px;color:var(--text2);margin-bottom:12px;text-align:left;line-height:1.8">
+          <div>✅ Compatible con WordPress 6.x · No modifica tu base de datos</div>
+          <div>✅ Desinstalable en 1 clic · Garantía 7 días si no mejora el puntaje</div>
+        </div>
+        <a href="#input-section" class="btn-pricing-cta">Arreglar mi web ahora</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- TESTIMONIALS -->
+  <section class="testimonials-section">
+    <h2 class="section-title">Resultados reales</h2>
+    <p class="section-sub">Esto es lo que nuestros análisis detectan en sitios reales todos los días.</p>
+    <div class="testimonials-grid">
+      <div class="testimonial-card">
+        <div class="testimonial-metric">5.2 → 9.1</div>
+        <div class="testimonial-label">puntaje después del plugin</div>
+        <p>Sitio WordPress con 40 plugins. El análisis detectó scripts bloqueantes, imágenes sin lazy load y meta tags vacíos. El plugin corrigió todo automáticamente.</p>
+      </div>
+      <div class="testimonial-card">
+        <div class="testimonial-metric">3/10</div>
+        <div class="testimonial-label">SEO inicial en ecommerce</div>
+        <p>Tienda online sin Open Graph, sin canonical, sin alt text. Cada producto compartido en WhatsApp no mostraba imagen ni descripción. 15 fallos críticos detectados.</p>
+      </div>
+      <div class="testimonial-card">
+        <div class="testimonial-metric">-68%</div>
+        <div class="testimonial-label">peso de página tras optimizar</div>
+        <p>Sitio institucional con imágenes de 4000px servidas a móviles. WebP + lazy loading + srcset corrigieron la carga. De 8MB a 2.5MB sin perder calidad visual.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ CONDENSADO -->
+  <section class="faq-section">
+    <h2 class="section-title">Preguntas frecuentes</h2>
+    <div class="faq-items">
+      <div class="faq-item">
+        <div class="faq-q">¿Qué hace exactamente el plugin?</div>
+        <div class="faq-a">Corrige automáticamente problemas técnicos detectados en el análisis: meta tags faltantes, imágenes sin lazy loading, falta de Open Graph, formularios sin labels, y más. Se instala en 1 clic desde WordPress.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">¿Qué incluye el plan gratuito y qué el PRO?</div>
+        <div class="faq-a"><strong>Gratis:</strong> scorecard completo, hallazgos, recomendaciones, guía markdown y link público compartible. <strong>PRO (ARS 12.000):</strong> todo lo anterior + plugin WordPress .zip, archivos HTML corregidos y reporte JSON completo. Pago único por análisis, sin suscripción.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">¿El plugin modifica el contenido de mis páginas?</div>
+        <div class="faq-a">No. El plugin corrige aspectos técnicos (meta tags, lazy load, estructura HTML) pero <strong>jamás edita</strong> el contenido de tus entradas, páginas o productos.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">¿Funciona con Yoast SEO o Rank Math?</div>
+        <div class="faq-a">Sí. El plugin convive sin conflictos con Yoast, Rank Math y la mayoría de los plugins de SEO. Detecta lo que falta y lo agrega sin tocar lo que ya tienen esos plugins.</div>
+      </div>
+    </div>
+    <p style="text-align:center;margin-top:20px"><a href="/faq">Ver las 12 preguntas →</a></p>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="final-cta">
+    <h2>¿Tu sitio está perdiendo clientes?</h2>
+    <p>Descubrilo en 30 segundos. Sin registro. Sin compromiso.</p>
+    <a href="#input-section" class="btn-analyze" style="display:inline-block;font-size:16px;padding:16px 40px">Detectar problemas de mi sitio</a>
   </section>
 
   <!-- FOOTER -->
   <footer class="footer">
     <a href="/features">Features</a>
     <a href="/faq">FAQ</a>
-    <a href="mailto:webanalyzer.app@gmail.com">webanalyzer.app@gmail.com</a>
+    <a href="mailto:no-reply@webanalyzer.com.ar">no-reply@webanalyzer.com.ar</a>
   </footer>
+
+  <!-- AUTH MODAL -->
+  <div id="auth-modal" class="modal" style="display:none">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <span class="modal-close" id="modal-close">&times;</span>
+      <div id="auth-form-container">
+        <h3 id="auth-modal-title">Iniciá sesión para comprar</h3>
+        <form id="auth-form">
+          <div class="form-group">
+            <input type="email" id="auth-email" placeholder="Email" required>
+          </div>
+          <div class="form-group">
+            <input type="password" id="auth-password" placeholder="Contraseña (mín. 6 caracteres)" required minlength="6">
+          </div>
+          <p id="auth-error" style="display:none;color:var(--red);font-size:12px;margin-bottom:8px"></p>
+          <button type="submit" class="btn-auth" id="auth-submit-btn">Ingresar</button>
+        </form>
+        <p class="auth-toggle-text">¿No tenés cuenta? <a href="#" id="auth-toggle">Registrate gratis</a></p>
+      </div>
+    </div>
+  </div>
 
 </div>
 

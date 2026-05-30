@@ -6,50 +6,56 @@
 <title>Pago exitoso — Web Analyzer</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-  .success-container {
-    max-width: 600px;
-    margin: 80px auto;
-    text-align: center;
-    padding: 40px 24px;
-  }
-  .success-icon {
-    font-size: 64px;
-    margin-bottom: 16px;
-  }
-  .success-title {
-    font-size: 24px;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 12px;
-  }
-  .success-desc {
-    color: #aaa;
-    font-size: 15px;
-    line-height: 1.6;
-    margin-bottom: 32px;
-  }
-  .btn-analyze {
-    display: inline-block;
-    padding: 12px 28px;
-    font-size: 15px;
-    font-weight: 600;
-    text-decoration: none;
-  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .page { max-width: 640px; margin: 0 auto; padding: 60px 24px 80px; text-align: center; }
+  .header-title { font-size: 22px; font-weight: 700; color: var(--text); text-decoration: none; }
+  .success-badge { width: 80px; height: 80px; border-radius: 50%; background: var(--green); color: #000; font-size: 40px; display: flex; align-items: center; justify-content: center; margin: 32px auto 20px; }
+  h1 { font-size: 26px; color: var(--text); margin-bottom: 8px; }
+  .sub { color: var(--text2); font-size: 15px; margin-bottom: 32px; line-height: 1.6; }
+  .steps { text-align: left; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 28px; }
+  .steps h3 { font-size: 15px; color: var(--text); margin-bottom: 12px; }
+  .steps ol { padding-left: 20px; margin: 0; }
+  .steps li { padding: 8px 0; font-size: 14px; color: var(--text2); line-height: 1.5; }
+  .steps li strong { color: var(--text); }
+  .btn-back { display: inline-block; padding: 14px 36px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer; transition: background 0.15s; }
+  .btn-back:hover { background: #1d5bd1; }
+  .footer-links { margin-top: 32px; font-size: 13px; color: var(--text3); }
+  .footer-links a { color: var(--blue); text-decoration: none; }
+  .footer-links a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
-<div class="success-container">
-  <div class="success-icon">✅</div>
-  <h1 class="success-title">¡Pago exitoso!</h1>
-  <p class="success-desc">
+<div class="page">
+
+  <a href="/" class="header-title">Web<span style="color:var(--blue)">Analyzer</span> <span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">&amp; Optimizer</span></a>
+
+  <div class="success-badge">✓</div>
+  <h1>¡Pago exitoso!</h1>
+  <p class="sub">
     {% if upgraded %}
-    ¡Listo! Ya podés <strong style="color:#58a6ff">descargar las soluciones</strong> de tu análisis.<br>
+    Tus descargas están <strong style="color:var(--green)">desbloqueadas</strong>.
     {% else %}
-    Tu pago está siendo procesado.<br>Las <strong style="color:#58a6ff">descargas</strong> se habilitarán en breve.<br>
+    Tu pago está siendo procesado. Las descargas se habilitarán en breve.
     {% endif %}
-    Volvé a la app para descargar los archivos.
   </p>
-  <a href="/" class="btn-analyze">Volver al analizador</a>
+
+  <div class="steps">
+    <h3>🚀 Próximos pasos</h3>
+    <ol>
+      <li><strong>Volvé al analizador</strong> — tus archivos ya están listos para descargar.</li>
+      <li><strong>Descargá el plugin WordPress</strong> — archivo .zip listo para instalar.</li>
+      <li><strong>Instalalo en 1 clic</strong> — WordPress Admin → Plugins → Añadir nuevo → Subir plugin.</li>
+      <li><strong>Re-analizá en 48-72 horas</strong> — verificá la mejora en tu scorecard.</li>
+    </ol>
+  </div>
+
+  <a href="/" class="btn-back">← Ir a mis resultados</a>
+
+  <div class="footer-links">
+    <p>¿Problemas con la descarga? <a href="mailto:no-reply@webanalyzer.com.ar">no-reply@webanalyzer.com.ar</a></p>
+    <p><a href="/faq">FAQ</a> · <a href="/">Analizar otro sitio</a></p>
+  </div>
+
 </div>
 </body>
 </html>
