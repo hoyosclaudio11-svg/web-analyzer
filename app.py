@@ -689,6 +689,48 @@ def api_history():
     return jsonify(listar_analisis())
 
 
+@app.route("/api/lead", methods=["POST"])
+def api_lead():
+    """Captura email del lead + scores y envía reporte completo."""
+    data = request.get_json(force=True)
+    email = (data.get("email") or "").strip()
+    url = (data.get("url") or "").strip()
+    promedio = data.get("promedio")
+    report_hash = data.get("report_hash", "")
+
+    if not email or not url:
+        return jsonify({"error": "Email y URL requeridos"}), 400
+
+    # Guardar lead
+    try:
+        track_event("lead_captured", None, url,
+            json.dumps({"email": email, "promedio": promedio, "report_hash": report_hash}))
+        log.info(f"trace={g.trace_id} lead={email} url={url} score={promedio}")
+    except Exception as e:
+        log.exception("Error guardando lead")
+
+    # Enviar reporte por email
+    if report_hash:
+        report_url = f"https://webanalyzer.com.ar/report/{report_hash}"
+    else:
+        report_url = url
+    subject = "Tu analisis web esta listo"
+    body = f"""Hola,
+
+Tu analisis de {url} esta completo.
+
+Puntaje general: {promedio}/10
+
+Ver el reporte completo aca:
+{report_url}
+
+---
+Web Analyzer
+"""
+    sent = send_email(email, subject, body)
+
+    return jsonify({"ok": True, "sent": sent})
+
 @app.route("/api/stats")
 def api_stats():
     try:

@@ -4,34 +4,19 @@
 const API = '/api/analyze';
 const DOWNLOAD = '/api/download';
 const HISTORY = '/api/history';
-const AUTH_REGISTER = '/api/auth/register';
-const AUTH_LOGIN = '/api/auth/login';
-const AUTH_ME = '/api/auth/me';
-const UPGRADE = '/api/upgrade';
-const MONITOR = '/api/monitor';
-
-const API_KEY = document.querySelector('meta[name="api-key"]')?.content || '';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-// ---------- User state ----------
-let currentUser = null;  // { email, tier, authenticated, analyses_count, downloads_count, purchased_reports }
-let currentReportHash = null;  // hash del último análisis
-let currentPurchased = false;  // si el último análisis fue comprado
+// ---------- State ----------
+let currentReportHash = null;
 
 function getUserToken() {
   return localStorage.getItem('wa_token') || '';
 }
 
-function setUserToken(token) {
-  if (token) localStorage.setItem('wa_token', token);
-  else localStorage.removeItem('wa_token');
-}
-
 function apiHeaders() {
   const headers = { 'Content-Type': 'application/json' };
-  if (API_KEY) headers['Authorization'] = `Bearer ${API_KEY}`;
   const token = getUserToken();
   if (token) headers['X-User-Token'] = token;
   return headers;
@@ -52,27 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await analyze(url);
   });
 
-  // Botones CTA demo
-  const btnDemoRegister = $('#btn-demo-register');
-  const btnDemoBuy = $('#btn-demo-buy');
-  if (btnDemoRegister) {
-    btnDemoRegister.addEventListener('click', () => {
-      openAuthModal('register');
-      const demoCta = $('#demo-cta');
-      if (demoCta) demoCta.style.display = 'none';
-    });
-  }
-  if (btnDemoBuy) {
-    btnDemoBuy.addEventListener('click', () => {
-      // Redirigir a registro primero, luego a compra
-      openAuthModal('register');
-      const demoCta = $('#demo-cta');
-      if (demoCta) demoCta.style.display = 'none';
-    });
-  }
-
   loadHistory();
-  initAuth();
   loadStats();
 
   // Auto-analizar si el usuario vuelve de un pago exitoso
@@ -149,10 +114,9 @@ async function loadStats() {
   try {
     const resp = await fetch('/api/stats');
     const data = await resp.json();
-    if (data.analyses > 0) {
-      $('#hero-stats').style.display = 'flex';
-      $('#stat-analyses').textContent = data.analyses;
-      $('#stat-downloads').textContent = data.downloads;
+    if (data.analyses && data.analyses > 0) {
+      $('#stat-analyses').textContent = data.analyses.toLocaleString();
+      $('#stat-pages').textContent = (data.pages || data.analyses).toLocaleString();
     }
   } catch (err) {
     // Silencioso
@@ -163,235 +127,245 @@ async function loadStats() {
 // Auth
 // =============================================================================
 
-async function initAuth() {
-  const token = getUserToken();
-  if (token) {
-    try {
-      const resp = await fetch(AUTH_ME, { headers: apiHeaders() });
-      const data = await resp.json();
-      if (data.authenticated) {
-        currentUser = data;
-      } else {
-        setUserToken('');
-        currentUser = null;
-      }
-    } catch {
-      currentUser = null;
-    }
-  }
-  updateAuthUI();
-  bindAuthEvents();
-  if (currentUser && currentUser.authenticated) {
-    loadMonitored();
-  }
-}
+let authMode = 'login';
+let pendingPurchaseReportHash = null;
 
-function updateAuthUI() {
-  const tierEl = $('#user-tier');
-  const btnLogin = $('#btn-login');
-  const btnRegister = $('#btn-register');
-  const btnLogout = $('#btn-logout');
-  const banner = $('#upgrade-banner');
-
-  if (currentUser && currentUser.authenticated) {
-    tierEl.textContent = currentUser.tier === 'paid' ? 'PRO' : 'GRATIS';
-    tierEl.className = 'user-tier ' + (currentUser.tier === 'paid' ? 'paid' : 'free');
-    tierEl.style.display = 'inline-block';
-    btnLogin.style.display = 'none';
-    btnRegister.style.display = 'none';
-    btnLogout.style.display = 'inline-block';
-    banner.style.display = 'block';
-    hideDemoCTA();
-  } else {
-    tierEl.style.display = 'none';
-    btnLogin.style.display = 'inline-block';
-    btnRegister.style.display = 'inline-block';
-    btnLogout.style.display = 'none';
-    banner.style.display = 'none';
-  }
-}
-
-function bindAuthEvents() {
-  $('#btn-login').addEventListener('click', (e) => { e.preventDefault(); openAuthModal('login'); });
-  $('#btn-register').addEventListener('click', (e) => { e.preventDefault(); openAuthModal('register'); });
-  $('#btn-logout').addEventListener('click', (e) => { e.preventDefault(); logout(); });
-  $('#switch-to-register').addEventListener('click', (e) => { e.preventDefault(); switchAuthPanel('register'); });
-  $('#switch-to-login').addEventListener('click', (e) => { e.preventDefault(); switchAuthPanel('login'); });
-  $('#modal-close').addEventListener('click', closeAuthModal);
-  $('#auth-modal .modal-overlay').addEventListener('click', closeAuthModal);
-  $('#login-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await login();
-  });
-  $('#register-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await register();
-  });
-  $('#btn-upgrade').addEventListener('click', async () => { await upgrade(); });
-}
-
-function openAuthModal(panel) {
-  switchAuthPanel(panel);
+function openAuthModal(reportHash) {
+  pendingPurchaseReportHash = reportHash || null;
+  authMode = 'login';
+  updateAuthModalUI();
   $('#auth-modal').style.display = 'flex';
+  $('#auth-email').focus();
 }
 
 function closeAuthModal() {
   $('#auth-modal').style.display = 'none';
+  pendingPurchaseReportHash = null;
 }
 
-function switchAuthPanel(panel) {
-  $('#auth-login').style.display = panel === 'login' ? 'block' : 'none';
-  $('#auth-register').style.display = panel === 'register' ? 'block' : 'none';
+function updateAuthModalUI() {
+  $('#auth-modal-title').textContent = authMode === 'login' ? 'Iniciá sesión para comprar' : 'Creá tu cuenta gratis';
+  $('#auth-submit-btn').textContent = authMode === 'login' ? 'Ingresar' : 'Crear cuenta';
+  $('#auth-toggle').textContent = authMode === 'login' ? 'Registrate gratis' : 'Ya tengo cuenta';
+  $('#auth-error').style.display = 'none';
 }
 
-async function login() {
-  const email = $('#login-email').value.trim();
-  const password = $('#login-pass').value.trim();
-  try {
-    const resp = await fetch(AUTH_LOGIN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) { alert(data.error || 'Error al ingresar'); return; }
-    setUserToken(data.token);
-    currentUser = { email: data.email, tier: data.tier, authenticated: true };
-    closeAuthModal();
-    updateAuthUI();
-    $('#login-pass').value = '';
-  } catch (err) {
-    alert('Error de conexión');
+document.addEventListener('DOMContentLoaded', () => {
+  // Auth modal events
+  const modal = $('#auth-modal');
+  if (modal) {
+    $('#modal-close')?.addEventListener('click', closeAuthModal);
+    modal.querySelector('.modal-overlay')?.addEventListener('click', closeAuthModal);
   }
-}
 
-async function register() {
-  const email = $('#reg-email').value.trim();
-  const password = $('#reg-pass').value.trim();
-  try {
-    const resp = await fetch(AUTH_REGISTER, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) { alert(data.error || 'Error al crear cuenta'); return; }
-    // Auto-login after register: no token returned, so do login
-    const loginResp = await fetch(AUTH_LOGIN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const loginData = await loginResp.json();
-    if (loginResp.ok) {
-      setUserToken(loginData.token);
-      currentUser = { email: loginData.email, tier: loginData.tier, authenticated: true };
+  $('#auth-toggle')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    authMode = authMode === 'login' ? 'register' : 'login';
+    updateAuthModalUI();
+  });
+
+  $('#auth-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('#auth-email').value.trim();
+    const password = $('#auth-password').value.trim();
+
+    if (!email || !password) {
+      showAuthError('Completá todos los campos.');
+      return;
     }
-    closeAuthModal();
-    updateAuthUI();
-    $('#reg-pass').value = '';
+
+    const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+    try {
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        showAuthError(data.error || 'Error al procesar la solicitud.');
+        return;
+      }
+
+      // Guardar sesion
+      if (data.token) {
+        localStorage.setItem('wa_token', data.token);
+      }
+      closeAuthModal();
+      updateAuthUI();
+
+      // Si habia compra pendiente, redirigir a MP
+      if (pendingPurchaseReportHash) {
+        purchaseAnalysis(pendingPurchaseReportHash);
+      }
+
+      showNotification(authMode === 'login' ? '¡Bienvenido de nuevo!' : '¡Cuenta creada! Ya podés comprar.');
+    } catch (err) {
+      showAuthError('Error de conexión. Probá de nuevo.');
+    }
+  });
+
+  // Check session on load
+  checkSession();
+});
+
+function showAuthError(msg) {
+  const el = $('#auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function checkSession() {
+  const token = localStorage.getItem('wa_token');
+  if (!token) return;
+  try {
+    const resp = await fetch('/api/auth/me', {
+      headers: { 'X-User-Token': token },
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.authenticated) {
+        renderAuthUI(data);
+      }
+    }
   } catch (err) {
-    alert('Error de conexión');
+    // Silencioso
   }
 }
 
-function logout() {
-  setUserToken('');
-  currentUser = null;
-  updateAuthUI();
-  hideResults();
+function updateAuthUI() {
+  const token = localStorage.getItem('wa_token');
+  if (!token) {
+    renderAuthUI(null);
+    return;
+  }
+  checkSession();
 }
 
-async function upgrade() {
-  if (!currentUser || !currentUser.authenticated) {
-    openAuthModal('login');
+function renderAuthUI(userData) {
+  const container = $('#header-right');
+  if (!container) return;
+
+  if (userData && userData.authenticated) {
+    const tier = userData.tier || 'free';
+    const tierLabel = tier === 'paid' ? 'PRO' : 'Free';
+    container.innerHTML = `
+      <span id="user-info" style="display:flex">
+        <span class="user-tier-badge ${tier}">${tierLabel}</span>
+        <span>${esc(userData.email)}</span>
+      </span>
+      <button class="btn-auth-outline" id="btn-logout">Salir</button>
+    `;
+    $('#btn-logout')?.addEventListener('click', () => {
+      localStorage.removeItem('wa_token');
+      renderAuthUI(null);
+      showNotification('Sesión cerrada.');
+    });
+  } else {
+    container.innerHTML = `
+      <button class="btn-auth-outline" id="btn-login">Ingresar</button>
+      <button class="btn-auth" id="btn-register">Crear cuenta</button>
+      <span id="status-text" class="status-text">Listo</span>
+    `;
+    $('#btn-login')?.addEventListener('click', () => {
+      authMode = 'login';
+      openAuthModal(null);
+    });
+    $('#btn-register')?.addEventListener('click', () => {
+      authMode = 'register';
+      openAuthModal(null);
+    });
+  }
+}
+
+async function purchaseAnalysis(reportHash) {
+  const token = localStorage.getItem('wa_token');
+  if (!token) {
+    openAuthModal(reportHash);
     return;
   }
-  if (!currentReportHash) {
-    alert('Analizá una URL primero antes de comprar.');
-    return;
-  }
+
   try {
     const resp = await fetch('/api/create-preference', {
       method: 'POST',
-      headers: apiHeaders(),
-      body: JSON.stringify({ report_hash: currentReportHash }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Token': token,
+      },
+      body: JSON.stringify({ report_hash: reportHash }),
     });
     const data = await resp.json();
-    if (!resp.ok) { alert(data.error || 'Error al crear preferencia de pago'); return; }
+
+    if (!resp.ok) {
+      showNotification('Error: ' + (data.error || 'No se pudo crear el pago.'));
+      return;
+    }
+
     if (data.url) {
       window.location.href = data.url;
     } else {
-      alert('No se pudo iniciar el pago. Reintentá.');
+      showNotification('Error: No se recibió la URL de pago.');
     }
   } catch (err) {
-    alert('Error de conexión');
+    showNotification('Error de conexión al crear el pago.');
   }
-}
-
-async function addMonitor(url, score) {
-  try {
-    const resp = await fetch(MONITOR, {
-      method: 'POST',
-      headers: apiHeaders(),
-      body: JSON.stringify({ url, score }),
-    });
-    const data = await resp.json();
-    if (resp.ok) {
-      $('#status-text').textContent = 'URL en monitoreo';
-    }
-  } catch (err) {
-    // Silencioso
-  }
-}
-
-async function loadMonitored() {
-  if (!currentUser || !currentUser.authenticated) return;
-  try {
-    const resp = await fetch(MONITOR, { headers: apiHeaders() });
-    const data = await resp.json();
-    renderMonitored(data);
-  } catch (err) {
-    // Silencioso
-  }
-}
-
-function renderMonitored(items) {
-  const section = $('#monitored-section');
-  const body = $('#monitored-body');
-  if (!items || !items.length) {
-    if (section) section.style.display = 'none';
-    return;
-  }
-  if (!section) return;
-  section.style.display = 'block';
-  body.innerHTML = items.map(m => `
-    <div class="historial-item">
-      <span class="hist-url">${esc(m.url)}</span>
-      <span class="hist-fecha">Score: ${m.last_score}/10</span>
-      <button class="btn-copy" onclick="deleteMonitor(${m.id})" style="font-size:11px">Quitar</button>
-    </div>`).join('');
-}
-
-async function deleteMonitor(id) {
-  try {
-    await fetch(`${MONITOR}?id=${id}`, { method: 'DELETE', headers: apiHeaders() });
-    loadMonitored();
-  } catch (err) {
-    // Silencioso
-  }
-}
-
-// =============================================================================
+}// =============================================================================
 // Render
 // =============================================================================
 
+// Email-gate: guardar datos pendientes
+let pendingData = null;
+
 function renderResults(data) {
   currentReportHash = data.report_hash || null;
-  currentPurchased = data.purchased || false;
+  // Guardar y mostrar gate (score + 2 hallazgos críticos + modal)
+  pendingData = data;
   showResults();
   renderScorecard(data.scorecard, data.promedio, data.promedio_color);
   renderShareLink(data.report_url, data.url_final || data.url, data.promedio);
+  // Mostrar solo 2 hallazgos como anticipo
+  if (data.hallazgos && data.hallazgos.length) {
+    var preview = data.hallazgos.slice(0, 2);
+    $('#hallazgos-body').innerHTML = '<h3 style="color:#ff6b6b;margin-bottom:12px">Problemas encontrados en tu web</h3>' +
+      preview.map(function(h) { return '<div class="hallazgo-item">' + h + '</div>'; }).join('');
+  }
+  // Ocultar el resto
+  document.querySelectorAll('#recomendaciones-body, #soluciones-body, #next-steps-body, #next-steps-card, #meta-body, #imagenes-body, #scripts-body, #forms-body, .soluciones-card, .tech-bar, .details-grid').forEach(function(el) { if(el) el.style.display = 'none'; });
+  // Mostrar modal de email
+  showEmailGate();
+}
+
+function showEmailGate() {
+  $('#email-gate-modal').style.display = 'block';
+}
+
+function hideEmailGate() {
+  $('#email-gate-modal').style.display = 'none';
+}
+
+function submitEmailGate(email) {
+  if (!pendingData) return;
+  hideEmailGate();
+  // Enviar lead
+  fetch('/api/lead', {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify({
+      email: email,
+      url: pendingData.url || pendingData.url_final,
+      promedio: pendingData.promedio,
+      report_hash: pendingData.report_hash
+    })
+  }).catch(function(){});
+  // Mostrar resultados completos
+  renderFullResults(pendingData);
+}
+
+function renderFullResults(data) {
+  // Restaurar secciones ocultas
+  document.querySelectorAll('#recomendaciones-body, #soluciones-body, #next-steps-body, #next-steps-card, #meta-body, #imagenes-body, #scripts-body, #forms-body, .soluciones-card, .tech-bar, .details-grid').forEach(function(el) { if(el) el.style.display = ''; });
+  renderUpgradeBanner(data);
   renderNextSteps(data);
   renderTech(data.tecnologia);
   renderHallazgos(data.hallazgos);
@@ -401,22 +375,42 @@ function renderResults(data) {
   renderImagenes(data.imagenes);
   renderScripts(data.scripts);
   renderForms(data.forms);
+  pendingData = null;
+}
 
-  // Mostrar CTA para usuarios anonimos
-  if (!currentUser || !currentUser.authenticated) {
-    showDemoCTA();
+// Email gate form
+document.addEventListener('DOMContentLoaded', function() {
+  var form = document.getElementById('email-gate-form');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var email = document.getElementById('email-gate-input').value.trim();
+      if (email) submitEmailGate(email);
+    });
   }
-}
+  var skip = document.getElementById('email-gate-skip');
+  if (skip) {
+    skip.addEventListener('click', function(e) {
+      e.preventDefault();
+      hideEmailGate();
+      if (pendingData) renderFullResults(pendingData);
+    });
+  }
+});
 
-function showDemoCTA() {
-  const cta = $('#demo-cta');
-  if (cta) cta.style.display = 'block';
-  setTimeout(() => { if (cta) cta.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 500);
-}
-
-function hideDemoCTA() {
-  const cta = $('#demo-cta');
-  if (cta) cta.style.display = 'none';
+function renderUpgradeBanner(data) {
+  const banner = $('#upgrade-banner');
+  if (!banner) return;
+  const hasBlocked = (data.soluciones || []).some(s => s.bloqueado);
+  if (!hasBlocked || data.purchased) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.innerHTML = `
+    <span>🔒 <strong>Las soluciones descargables son PRO.</strong> Desbloqueá el plugin WordPress y los archivos corregidos por <strong>ARS 12.000</strong> (pago único).</span>
+    <button class="btn-upgrade" onclick="purchaseAnalysis('${data.report_hash || ''}')">Desbloquear PRO</button>
+  `;
+  banner.style.display = 'flex';
 }
 
 function renderScorecard(scorecard, promedio, color) {
@@ -462,12 +456,10 @@ function renderShareLink(reportUrl, url, promedio) {
     const target = $('#scorecard-promedio');
     target.parentNode.insertBefore(section, target.nextSibling);
   }
-  const authed = currentUser && currentUser.authenticated;
   section.innerHTML = `
     <div class="share-box">
       <span class="share-url">${esc(fullUrl)}</span>
       <button class="btn-copy" data-url="${esc(fullUrl)}">Copiar</button>
-      ${authed && url ? `<button class="btn-copy" id="btn-monitor" style="margin-left:4px">🔔 Monitorear</button>` : ''}
     </div>`;
   section.querySelector('.btn-copy').addEventListener('click', function () {
     const url = this.getAttribute('data-url');
@@ -479,14 +471,6 @@ function renderShareLink(reportUrl, url, promedio) {
       prompt('Copiá esta URL:', url);
     });
   });
-  const btnMonitor = section.querySelector('#btn-monitor');
-  if (btnMonitor) {
-    btnMonitor.addEventListener('click', () => {
-      addMonitor(url, promedio);
-      btnMonitor.textContent = '✅ Monitoreando';
-      btnMonitor.disabled = true;
-    });
-  }
 }
 
 function renderTech(tech) {
@@ -627,23 +611,15 @@ function renderNextSteps(data) {
     ${urgencyHTML}
     <div class="next-steps-list">
       ${steps.map(s => {
-        const locked = !!(s.file && (s.file.bloqueado || s.file.tipo === 'zip' || s.file.tipo === 'json'));
-        const canDownload = currentPurchased || (currentUser && currentUser.tier === 'paid');
         let actionHtml = '';
         if (s.cta && s.file) {
-          if (locked && !canDownload) {
-            actionHtml = `<span class="locked-badge" style="cursor:pointer;margin-top:8px" onclick="document.getElementById('btn-upgrade').click()">ARS 12.000 — Desbloquear descargas</span>`;
-          } else {
-            const dlUrl = '/api/download/' + encodeURIComponent(s.file.nombre);
-            const params = [];
-            if (getUserToken()) params.push('user_token=' + encodeURIComponent(getUserToken()));
-            if (currentReportHash) params.push('report_hash=' + encodeURIComponent(currentReportHash));
-            if (API_KEY) params.push('token=' + encodeURIComponent(API_KEY));
-
-            actionHtml = `<a href="${dlUrl}?${params.join('&')}" class="btn-download step-btn" download>
-                ${s.cta}
-              </a>`;
-          }
+          const dlUrl = '/api/download/' + encodeURIComponent(s.file.nombre);
+          const params = [];
+          if (currentReportHash) params.push('report_hash=' + encodeURIComponent(currentReportHash));
+          const ut = getUserToken(); if (ut) params.push('user_token=' + encodeURIComponent(ut));
+          actionHtml = `<a href="${dlUrl}?${params.join('&')}" class="btn-download step-btn" download>
+              ${s.cta}
+            </a>`;
         }
         return `
         <div class="next-step-item">
@@ -664,23 +640,24 @@ function renderSoluciones(soluciones) {
     body.innerHTML = '<p class="empty-text">Sin soluciones generadas.</p>';
     return;
   }
-  const canDownload = currentPurchased || (currentUser && currentUser.tier === 'paid');
-
   body.innerHTML = soluciones.map(s => {
-    const locked = !canDownload && (s.bloqueado || s.tipo === 'zip' || s.tipo === 'json');
     const dlParams = [];
-    if (getUserToken()) dlParams.push('user_token=' + encodeURIComponent(getUserToken()));
     if (currentReportHash) dlParams.push('report_hash=' + encodeURIComponent(currentReportHash));
-    if (API_KEY) dlParams.push('token=' + encodeURIComponent(API_KEY));
-    const downloadHtml = locked
-      ? `<span class="locked-badge">ARS 12.000</span>`
+    const ut2 = getUserToken(); if (ut2) dlParams.push('user_token=' + encodeURIComponent(ut2));
+    const actionHtml = s.bloqueado
+      ? `<div style="margin-top: 8px">
+           <span class="locked-badge" style="background:rgba(245,158,11,0.15);color:var(--accent-warm);padding:3px 10px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase">🔒 PRO</span>
+           <button class="btn-upgrade" onclick="purchaseAnalysis('${currentReportHash || ''}')" style="width:100%;margin-top:6px;font-size:13px;padding:10px">
+             Desbloquear por ARS 12.000
+           </button>
+         </div>`
       : `<a href="${DOWNLOAD}/${encodeURIComponent(s.nombre)}?${dlParams.join('&')}" class="btn-download" download>Descargar</a>`;
     return `
-      <div class="solucion-item${locked ? ' locked' : ''}">
+      <div class="solucion-item">
         <div class="sol-type">.${esc(s.tipo)}</div>
         <div class="sol-name">${esc(s.nombre)}</div>
         <div class="sol-desc">${esc(s.descripcion)}</div>
-        ${downloadHtml}
+        ${actionHtml}
       </div>`;
   }).join('');
 }
