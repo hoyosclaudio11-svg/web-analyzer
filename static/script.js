@@ -193,6 +193,17 @@ document.addEventListener('DOMContentLoaded', () => {
       updateAuthUI();
 
       showNotification(authMode === 'login' ? '¡Bienvenido de nuevo!' : '¡Cuenta creada! Ya podés descargar.');
+
+      // Continuar flujo pendiente: feedback o resultados completos
+      var dataToResume = feedbackData || pendingData;
+      if (dataToResume) {
+        // Si ya está logueado, mostrar feedback o resultados
+        if (getUserToken()) {
+          checkFeedbackAndProceed(dataToResume);
+        } else {
+          renderFullResults(dataToResume);
+        }
+      }
     } catch (err) {
       showAuthError('Error de conexión. Probá de nuevo.');
     }
