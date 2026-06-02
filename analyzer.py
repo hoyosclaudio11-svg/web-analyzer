@@ -93,7 +93,22 @@ def _safe_get(url, timeout=15):
         "Accept-Language": "es-AR,es;q=0.9",
     }
     try:
-        resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+        # Seguimos redirects manualmente para validar cada destino (anti-SSRF)
+        session = requests.Session()
+        resp = session.get(url, headers=headers, timeout=timeout, allow_redirects=False)
+        hops = 0
+        while resp.is_redirect and hops < 10:
+            next_url = resp.headers.get("Location", "")
+            if not next_url.startswith(("http://", "https://")):
+                # URL relativa — la resolvemos contra la actual
+                from urllib.parse import urljoin
+                next_url = urljoin(url, next_url)
+            ok, reason = _is_public_url(next_url)
+            if not ok:
+                raise ValueError(f"Redirect bloqueado (SSRF): {reason}")
+            url = next_url
+            resp = session.get(url, headers=headers, timeout=timeout, allow_redirects=False)
+            hops += 1
         resp.raise_for_status()
         return resp
     except requests.Timeout:
@@ -830,17 +845,16 @@ Agregar en el `<head>`:
 """,
     })
 
-    # --- Solución 2: Plugin WordPress ZIP si aplica ---
-    if any("WordPress" in t for t in tech):
-        plugin_code = _generar_plugin_wordpress(resultado, safe_domain)
-        plugin_zip = _crear_zip_plugin(safe_domain, plugin_code)
-        soluciones.append({
-            "nombre": f"{safe_domain}_optimizer.zip",
-            "tipo": "zip",
-            "descripcion": "Plugin WordPress listo para instalar. Descargar ZIP y subir a Plugins > Añadir nuevo > Subir plugin.",
-            "contenido": plugin_zip,
-            "binario": True,
-        })
+    # --- Solucion 2: Plugin WordPress ZIP (siempre, para cualquier sitio) ---
+    plugin_code = _generar_plugin_wordpress(resultado, safe_domain)
+    plugin_zip = _crear_zip_plugin(safe_domain, plugin_code)
+    soluciones.append({
+        "nombre": f"{safe_domain}_optimizer.zip",
+        "tipo": "zip",
+        "descripcion": "Plugin WordPress listo para instalar. Descargar ZIP y subir a Plugins > Anadir nuevo > Subir plugin. Compatible con cualquier sitio WordPress.",
+        "contenido": plugin_zip,
+        "binario": True,
+    })
 
     # --- Solución 2b: Snippet Shopify si aplica ---
     if any("Shopify" in t for t in tech):
