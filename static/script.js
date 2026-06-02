@@ -40,20 +40,20 @@ document.addEventListener('DOMContentLoaded', () => {
   loadHistory();
   loadStats();
 
-  // Auto-analizar si el usuario vuelve de un pago exitoso
+  // Auto-analizar o mostrar bienvenida
   const params = new URLSearchParams(window.location.search);
   const analyzeUrl = params.get('analyze_url');
-  const wasPurchased = params.get('purchased');
+  const wasWelcome = params.get('welcome');
+  if (wasWelcome === '1') {
+    showNotification('🎉 ¡Bienvenido! Tu cuenta está lista. Analizá cualquier sitio gratis.');
+    window.history.replaceState({}, '', '/');
+  }
   if (analyzeUrl) {
     input.value = analyzeUrl;
-    if (wasPurchased === '1') {
-      showNotification('¡Pago exitoso! Tus descargas están desbloqueadas.');
-    }
     analyze(analyzeUrl).then(() => {
-      // Limpiar query string de la URL sin recargar
       window.history.replaceState({}, '', '/');
     });
-  } else {
+  } else if (!wasWelcome) {
     input.focus();
   }
 });
@@ -128,10 +128,8 @@ async function loadStats() {
 // =============================================================================
 
 let authMode = 'login';
-let pendingPurchaseReportHash = null;
 
-function openAuthModal(reportHash) {
-  pendingPurchaseReportHash = reportHash || null;
+function openAuthModal() {
   authMode = 'login';
   updateAuthModalUI();
   $('#auth-modal').style.display = 'flex';
@@ -140,11 +138,10 @@ function openAuthModal(reportHash) {
 
 function closeAuthModal() {
   $('#auth-modal').style.display = 'none';
-  pendingPurchaseReportHash = null;
 }
 
 function updateAuthModalUI() {
-  $('#auth-modal-title').textContent = authMode === 'login' ? 'Iniciá sesión para comprar' : 'Creá tu cuenta gratis';
+  $('#auth-modal-title').textContent = authMode === 'login' ? 'Creá tu cuenta gratis para descargar' : 'Creá tu cuenta gratis';
   $('#auth-submit-btn').textContent = authMode === 'login' ? 'Ingresar' : 'Crear cuenta';
   $('#auth-toggle').textContent = authMode === 'login' ? 'Registrate gratis' : 'Ya tengo cuenta';
   $('#auth-error').style.display = 'none';
@@ -195,12 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
       closeAuthModal();
       updateAuthUI();
 
-      // Si habia compra pendiente, redirigir a MP
-      if (pendingPurchaseReportHash) {
-        purchaseAnalysis(pendingPurchaseReportHash);
-      }
-
-      showNotification(authMode === 'login' ? '¡Bienvenido de nuevo!' : '¡Cuenta creada! Ya podés comprar.');
+      showNotification(authMode === 'login' ? '¡Bienvenido de nuevo!' : '¡Cuenta creada! Ya podés descargar.');
     } catch (err) {
       showAuthError('Error de conexión. Probá de nuevo.');
     }
@@ -270,47 +262,16 @@ function renderAuthUI(userData) {
     `;
     $('#btn-login')?.addEventListener('click', () => {
       authMode = 'login';
-      openAuthModal(null);
+      openAuthModal();
     });
     $('#btn-register')?.addEventListener('click', () => {
       authMode = 'register';
-      openAuthModal(null);
+      openAuthModal();
     });
   }
 }
 
-async function purchaseAnalysis(reportHash) {
-  const token = localStorage.getItem('wa_token');
-  if (!token) {
-    openAuthModal(reportHash);
-    return;
-  }
-
-  try {
-    const resp = await fetch('/api/create-preference', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Token': token,
-      },
-      body: JSON.stringify({ report_hash: reportHash }),
-    });
-    const data = await resp.json();
-
-    if (!resp.ok) {
-      showNotification('Error: ' + (data.error || 'No se pudo crear el pago.'));
-      return;
-    }
-
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      showNotification('Error: No se recibió la URL de pago.');
-    }
-  } catch (err) {
-    showNotification('Error de conexión al crear el pago.');
-  }
-}// =============================================================================
+// =============================================================================
 // Render
 // =============================================================================
 
@@ -364,14 +325,13 @@ function submitEmailGate(email) {
       report_hash: pendingData.report_hash
     })
   }).catch(function(){});
-  // Mostrar resultados completos
-  renderFullResults(pendingData);
+  // Pasar a encuesta de feedback
+  checkFeedbackAndProceed(pendingData);
 }
 
 function renderFullResults(data) {
   // Restaurar secciones ocultas
   document.querySelectorAll('#recomendaciones-body, #soluciones-body, #next-steps-body, #next-steps-card, #meta-body, #imagenes-body, #scripts-body, #forms-body, .soluciones-card, .tech-bar, .details-grid').forEach(function(el) { if(el) el.style.display = ''; });
-  renderUpgradeBanner(data);
   renderNextSteps(data);
   renderTech(data.tecnologia);
   renderHallazgos(data.hallazgos);
@@ -382,6 +342,46 @@ function renderFullResults(data) {
   renderScripts(data.scripts);
   renderForms(data.forms);
   pendingData = null;
+}
+
+// =============================================================================
+// Feedback modal
+// =============================================================================
+
+let feedbackRating = 0;
+let feedbackData = null;
+
+function showFeedbackModal(data, isLoggedIn) {
+  feedbackData = data;
+  feedbackRating = 0;
+  document.querySelectorAll('#star-rating .star').forEach(function(s) { s.classList.remove('active'); });
+  $('#feedback-comment').value = '';
+  $('#feedback-updates').checked = false;
+  var submitBtn = $('#feedback-submit-btn');
+  if (!isLoggedIn) {
+    submitBtn.textContent = 'Crear cuenta gratis y ver resultados';
+    submitBtn.style.background = '#2563eb';
+    submitBtn.style.color = '#fff';
+  } else {
+    submitBtn.textContent = 'Listo, ver mis resultados';
+    submitBtn.style.background = '#3fb950';
+    submitBtn.style.color = '#000';
+  }
+  $('#feedback-modal').style.display = 'flex';
+}
+
+function hideFeedbackModal() {
+  $('#feedback-modal').style.display = 'none';
+}
+
+function checkFeedbackAndProceed(data) {
+  feedbackData = data;
+  var token = getUserToken();
+  if (!token) {
+    showFeedbackModal(data, false);
+    return;
+  }
+  showFeedbackModal(data, true);
 }
 
 // Email gate form
@@ -399,7 +399,7 @@ document.addEventListener('DOMContentLoaded', function() {
     skip.addEventListener('click', function(e) {
       e.preventDefault();
       hideEmailGate();
-      if (pendingData) renderFullResults(pendingData);
+      if (pendingData) checkFeedbackAndProceed(pendingData);
     });
   }
   // Cerrar modal al hacer clic en el overlay
@@ -407,25 +407,10 @@ document.addEventListener('DOMContentLoaded', function() {
   if (gateModal) {
     gateModal.querySelector('.modal-overlay')?.addEventListener('click', function() {
       hideEmailGate();
-      if (pendingData) renderFullResults(pendingData);
+      if (pendingData) checkFeedbackAndProceed(pendingData);
     });
   }
 });
-
-function renderUpgradeBanner(data) {
-  const banner = $('#upgrade-banner');
-  if (!banner) return;
-  const hasBlocked = (data.soluciones || []).some(s => s.bloqueado);
-  if (!hasBlocked || data.purchased) {
-    banner.style.display = 'none';
-    return;
-  }
-  banner.innerHTML = `
-    <span>🔒 <strong>Las soluciones descargables son PRO.</strong> Desbloqueá el plugin WordPress y los archivos corregidos por <strong>ARS 12.000</strong> (pago único).</span>
-    <button class="btn-upgrade" onclick="purchaseAnalysis('${data.report_hash || ''}')">Desbloquear PRO</button>
-  `;
-  banner.style.display = 'flex';
-}
 
 function renderScorecard(scorecard, promedio, color) {
   const grid = $('#scorecard-grid');
@@ -658,20 +643,12 @@ function renderSoluciones(soluciones) {
     const dlParams = [];
     if (currentReportHash) dlParams.push('report_hash=' + encodeURIComponent(currentReportHash));
     const ut2 = getUserToken(); if (ut2) dlParams.push('user_token=' + encodeURIComponent(ut2));
-    const actionHtml = s.bloqueado
-      ? `<div style="margin-top: 8px">
-           <span class="locked-badge" style="background:rgba(245,158,11,0.15);color:var(--accent-warm);padding:3px 10px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase">🔒 PRO</span>
-           <button class="btn-upgrade" onclick="purchaseAnalysis('${currentReportHash || ''}')" style="width:100%;margin-top:6px;font-size:13px;padding:10px">
-             Desbloquear por ARS 12.000
-           </button>
-         </div>`
-      : `<a href="${DOWNLOAD}/${encodeURIComponent(s.nombre)}?${dlParams.join('&')}" class="btn-download" download>Descargar</a>`;
     return `
       <div class="solucion-item">
         <div class="sol-type">.${esc(s.tipo)}</div>
         <div class="sol-name">${esc(s.nombre)}</div>
         <div class="sol-desc">${esc(s.descripcion)}</div>
-        ${actionHtml}
+        <a href="${DOWNLOAD}/${encodeURIComponent(s.nombre)}?${dlParams.join('&')}" class="btn-download" download>Descargar</a>
       </div>`;
   }).join('');
 }
@@ -776,6 +753,123 @@ function getPreviousScore(items, url, currentIndex) {
   }
   return null;
 }
+
+// =============================================================================
+// Feedback modal events + download interception
+// =============================================================================
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Estrellas clickeables
+  var stars = document.querySelectorAll('#star-rating .star');
+  stars.forEach(function(star) {
+    star.addEventListener('click', function() {
+      feedbackRating = parseInt(this.getAttribute('data-rating'));
+      stars.forEach(function(s) {
+        s.classList.toggle('active', parseInt(s.getAttribute('data-rating')) <= feedbackRating);
+      });
+    });
+  });
+
+  // Submit del feedback
+  var submitBtn = $('#feedback-submit-btn');
+  if (submitBtn) {
+    submitBtn.addEventListener('click', async function() {
+      var token = getUserToken();
+      if (!token) {
+        hideFeedbackModal();
+        // Abrir auth y después de registrarse volver al feedback
+        openAuthModalForFeedback(feedbackData);
+        return;
+      }
+      if (feedbackRating > 0) {
+        try {
+          await fetch('/api/feedback', {
+            method: 'POST',
+            headers: apiHeaders(),
+            body: JSON.stringify({
+              report_hash: feedbackData.report_hash,
+              rating: feedbackRating,
+              comentario: $('#feedback-comment').value.trim(),
+              recibir_updates: $('#feedback-updates').checked,
+            }),
+          });
+        } catch (e) {}
+      }
+      hideFeedbackModal();
+      if (feedbackData) renderFullResults(feedbackData);
+    });
+  }
+
+  // Skip del feedback
+  var skipFb = $('#feedback-skip');
+  if (skipFb) {
+    skipFb.addEventListener('click', function(e) {
+      e.preventDefault();
+      hideFeedbackModal();
+      if (feedbackData) renderFullResults(feedbackData);
+    });
+  }
+
+  // Cerrar feedback al hacer clic en overlay
+  var fbModal = $('#feedback-modal');
+  if (fbModal) {
+    fbModal.querySelector('.modal-overlay')?.addEventListener('click', function() {
+      hideFeedbackModal();
+      if (feedbackData) renderFullResults(feedbackData);
+    });
+  }
+});
+
+// Abre auth y guarda intencion de volver al feedback
+function openAuthModalForFeedback(data) {
+  feedbackData = data;
+  openAuthModal();
+}
+
+// Interceptar clicks en descargas premium para manejar auth/feedback
+document.addEventListener('click', async function(e) {
+  var link = e.target.closest('a[href*="/api/download/"]');
+  if (!link) return;
+  var href = link.getAttribute('href');
+  if (!href) return;
+  // Solo interceptar archivos premium
+  var isPremium = href.indexOf('.zip') > -1 || href.indexOf('.json') > -1;
+  if (!isPremium) return;
+
+  e.preventDefault();
+  try {
+    var resp = await fetch(href);
+    if (resp.status === 403) {
+      var data = await resp.json();
+      if (data.action === 'feedback_required') {
+        showFeedbackModal(feedbackData || pendingData || { report_hash: currentReportHash }, true);
+      } else {
+        showNotification(data.error || 'Acceso denegado.');
+      }
+      return;
+    }
+    if (resp.status === 401) {
+      openAuthModalForFeedback(feedbackData || pendingData || { report_hash: currentReportHash });
+      return;
+    }
+    if (resp.ok) {
+      var blob = await resp.blob();
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = href.split('/').pop().split('?')[0];
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      var errData = await resp.json().catch(function() { return {}; });
+      showNotification(errData.error || 'Error al descargar.');
+    }
+  } catch (err) {
+    showNotification('Error de conexion al descargar.');
+  }
+});
 
 // =============================================================================
 // UI helpers

@@ -10,7 +10,7 @@ try:
     from dotenv import load_dotenv
     _env_path = Path(__file__).resolve().parent / ".env"
     if _env_path.exists():
-        load_dotenv(_env_path)
+        load_dotenv(_env_path, override=True)
 except ImportError:
     pass
 import re
@@ -22,10 +22,6 @@ import logging
 import requests
 from datetime import datetime
 
-try:
-    import mercadopago as _mp
-except ImportError:
-    _mp = None
 from flask import Flask, render_template, request, jsonify, send_file, g, redirect
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -35,10 +31,10 @@ from waitress import serve
 from analyzer import analizar, listar_analisis, _analizar_multipagina
 from database import (
     init_db, create_user, authenticate, get_user_by_token,
-    upgrade_to_paid, get_user_stats, increment_analyses, increment_downloads,
+    get_user_stats, increment_analyses, increment_downloads,
     create_shared_report, get_shared_report, track_event,
     add_monitored_url, get_monitored_urls, update_monitored_score, delete_monitored_url,
-    purchase_analysis, has_purchased, get_purchased_reports,
+    has_submitted_feedback, set_receive_updates,
 )
 
 # ---------------------------------------------------------------------------
@@ -63,13 +59,10 @@ limiter = Limiter(
 )
 
 API_KEY = os.environ.get("ANALYZER_API_KEY", "")
-MP_ACCESS_TOKEN = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "")
-MP_WEBHOOK_SECRET = os.environ.get("MERCADOPAGO_WEBHOOK_SECRET", "")
-PRICE_ARS = int(os.environ.get("PRICE_ARS", "12000"))
-MP_SANDBOX = os.environ.get("MERCADOPAGO_SANDBOX", "false").lower() == "true"
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
-# --- SMTP para correos transaccionales ---
+# --- Email: Resend (primario) + SMTP Ferozo (fallback) ---
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 SMTP_HOST = os.environ.get("SMTP_HOST", "a0110133.ferozo.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
 SMTP_USER = os.environ.get("SMTP_USER", "no-reply@webanalyzer.com.ar")
@@ -77,7 +70,34 @@ SMTP_PASS = os.environ.get("SMTP_PASS", "25YmQhbaWJ")
 SMTP_FROM = os.environ.get("SMTP_FROM", "Web Analyzer <no-reply@webanalyzer.com.ar>")
 
 def send_email(to, subject, body):
-    """Envia un correo via SMTP (Ferozo/DonWeb)."""
+    """Envia correo: Resend si hay API key, sino SMTP Ferozo."""
+
+    # Intentar Resend primero (funciona desde Render)
+    if RESEND_API_KEY:
+        try:
+            resp = __import__("requests").post(
+                "https://api.resend.com/emails",
+                json={
+                    "from": SMTP_FROM,
+                    "to": [to],
+                    "subject": subject,
+                    "text": body,
+                },
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                log.info(f"Resend OK a {to}: {subject}")
+                return True
+            else:
+                log.warning(f"Resend fallo ({resp.status_code}): {resp.text[:200]}")
+        except Exception as e:
+            log.warning(f"Resend error: {e}")
+
+    # Fallback: SMTP Ferozo
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
@@ -129,9 +149,7 @@ def check_auth():
         return None
     if request.path in ("/api/auth/register", "/api/auth/login"):
         return None
-    if request.path.startswith("/api/mercadopago"):
-        return None
-    if request.path in ("/checkout-success", "/activar-pro"):
+    if request.path in ("/checkout-success",):
         return None
 
     # API key global (modo admin/dev)
@@ -165,6 +183,32 @@ def assign_trace_id():
     g.start_time = time.time()
 
 
+@app.errorhandler(500)
+def handle_500(e):
+    """Devuelve JSON en vez de HTML para errores internos."""
+    log.exception(f"trace={g.get('trace_id', '-')} 500 Internal Error")
+    return jsonify({
+        "error": "Error interno del servidor. Reintentá en unos segundos.",
+        "code": "INTERNAL_ERROR",
+        "trace_id": g.get('trace_id', ''),
+    }), 500
+
+
+@app.errorhandler(404)
+def handle_404(e):
+    return jsonify({"error": "Ruta no encontrada", "code": "NOT_FOUND"}), 404
+
+
+@app.errorhandler(405)
+def handle_405(e):
+    return jsonify({"error": "Método no permitido", "code": "METHOD_NOT_ALLOWED"}), 405
+
+
+@app.errorhandler(429)
+def handle_429(e):
+    return jsonify({"error": "Demasiadas solicitudes. Esperá un minuto.", "code": "RATE_LIMITED"}), 429
+
+
 @app.after_request
 def log_request(response):
     if request.path.startswith("/static"):
@@ -187,10 +231,6 @@ def log_request(response):
 def index():
     return render_template("index.html")
 
-
-@app.route("/activar-pro")
-def activar_pro_page():
-    return render_template("activar-pro.html", dev_mode=DEV_MODE)
 
 @app.route("/faq")
 def faq_page():
@@ -244,7 +284,11 @@ def api_login():
     data = request.get_json(force=True)
     email = (data.get("email") or "").strip()
     password = (data.get("password") or "").strip()
-    user = authenticate(email, password)
+    try:
+        user = authenticate(email, password)
+    except Exception as e:
+        log.exception(f"trace={g.trace_id} Error en autenticación")
+        return jsonify({"error": f"Error al iniciar sesión: {e}"}), 500
     if not user:
         return jsonify({"error": "Credenciales inválidas"}), 401
     track_event("user_logged_in", user["id"])
@@ -266,235 +310,55 @@ def api_me():
         "tier": stats.get("tier", "free"),
         "analyses_count": stats.get("analyses_count", 0),
         "downloads_count": stats.get("downloads_count", 0),
+        "receive_updates": bool(stats.get("receive_updates", False)),
         "authenticated": True,
-        "purchased_reports": get_purchased_reports(user_id),
     })
-
-
-# =============================================================================
-# Upgrade (MercadoPago Checkout Pro)
-# =============================================================================
-
-
-@app.route("/api/create-preference", methods=["POST"])
-def api_create_preference():
-    if not g.current_user:
-        return jsonify({"error": "Debés iniciar sesión primero"}), 401
-    if not _mp:
-        return jsonify({"error": "MercadoPago: paquete no instalado."}), 500
-    if not MP_ACCESS_TOKEN:
-        return jsonify({"error": "MercadoPago: MERCADOPAGO_ACCESS_TOKEN no configurada."}), 500
-
-    data = request.get_json(force=True)
-    report_hash = (data.get("report_hash") or "").strip()
-    if not report_hash:
-        return jsonify({"error": "report_hash requerido"}), 400
-
-    host = request.host_url.rstrip("/")
-    # En producción detrás de reverse-proxy, Flask ve HTTP pero la URL
-    # pública es HTTPS.  Detectamos vía X-Forwarded-Proto o ausencia de DEV_MODE.
-    if not DEV_MODE or request.headers.get("X-Forwarded-Proto") == "https":
-        host = host.replace("http://", "https://")
-
-    preference_data = {
-        "items": [{
-            "title": "Web Analyzer — Análisis y descargas",
-            "quantity": 1,
-            "currency_id": "ARS",
-            "unit_price": PRICE_ARS,
-        }],
-        "metadata": {
-            "user_id": str(g.current_user["id"]),
-            "report_hash": report_hash,
-        },
-        "external_reference": report_hash,
-        "back_urls": {
-            "success": host + "/checkout-success",
-            "failure": host + "/",
-            "pending": host + "/",
-        },
-        "auto_return": "approved",
-    }
-    # notification_url solo en producción (no en desarrollo local)
-    if not DEV_MODE:
-        preference_data["notification_url"] = host + "/api/mercadopago-webhook"
-
-    try:
-        headers = {
-            "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
-            "Content-Type": "application/json",
-        }
-        if MP_SANDBOX:
-            headers["X-Sandbox"] = "true"
-        r = requests.post(
-            "https://api.mercadopago.com/checkout/preferences",
-            json=preference_data,
-            headers=headers,
-            timeout=15,
-        )
-        pref = r.json()
-        if r.status_code >= 400:
-            log.error(f"MP API error {r.status_code}: {pref}")
-            return jsonify({"error": f"MercadoPago: {pref.get('message', pref.get('error', 'error desconocido'))}"}), 500
-        init_point = pref.get("sandbox_init_point") if MP_SANDBOX else pref.get("init_point", "")
-        if not init_point:
-            init_point = pref.get("sandbox_init_point") or pref.get("init_point", "")
-        if init_point:
-            return jsonify({"url": init_point, "preference_id": pref.get("id")})
-        log.error(f"MP preference sin init_point: {pref}")
-        return jsonify({"error": f"No se pudo crear la preferencia. MP: {pref.get('message', pref)}"}), 500
-    except Exception as e:
-        log.exception("Error creando preferencia MercadoPago")
-        return jsonify({"error": str(e)}), 500
-
-
-def _validar_firma_mp() -> bool:
-    """Valida la firma x-signature del webhook de MercadoPago."""
-    if not MP_WEBHOOK_SECRET:
-        log.error("MERCADOPAGO_WEBHOOK_SECRET no configurada — webhook rechazado")
-        return False
-    sig = request.headers.get("x-signature", "")
-    if not sig:
-        log.warning("Webhook MP: falta header x-signature")
-        return False
-    try:
-        import hmac
-        parts = dict(p.split("=", 1) for p in sig.split(","))
-        ts = parts.get("ts", "")
-        v1 = parts.get("v1", "")
-        body = request.get_data(as_text=True)
-        expected = hmac.new(
-            MP_WEBHOOK_SECRET.encode(),
-            f"ts={ts}.{body}".encode(),
-            "sha256",
-        ).hexdigest()
-        return hmac.compare_digest(v1, expected)
-    except Exception:
-        log.exception("Error validando firma MP")
-        return False
-
-
-@app.route("/api/mercadopago-webhook", methods=["POST"])
-@limiter.limit("20 per minute")
-def api_mercadopago_webhook():
-    if not _validar_firma_mp():
-        return jsonify({"error": "Firma invalida"}), 403
-
-    data = request.get_json(force=True)
-    log.info(f"Webhook MP recibido: action={data.get('action', '?')}")
-
-    if not MP_ACCESS_TOKEN:
-        log.warning("MERCADOPAGO_ACCESS_TOKEN no configurada")
-        return jsonify({"error": "Webhook no configurado"}), 400
-
-    payment_id = data.get("data", {}).get("id") or data.get("payment_id")
-    if not payment_id:
-        log.warning("Webhook MP sin payment_id")
-        return jsonify({"error": "payment_id faltante"}), 400
-
-    try:
-        sdk = _mp.SDK(MP_ACCESS_TOKEN)
-        result = sdk.payment().get(payment_id)
-        payment = result.get("response", result)
-        status = payment.get("status", "")
-        metadata = payment.get("metadata") or {}
-        user_id = metadata.get("user_id")
-        report_hash = metadata.get("report_hash")
-
-        if not user_id or not report_hash:
-            pref_id = payment.get("preference_id", "")
-            order = payment.get("order") or payment.get("merchant_order") or {}
-            if not pref_id and order:
-                pref_id = order.get("preference_id", "")
-            if pref_id:
-                pref_result = sdk.preference().get(pref_id)
-                pref = pref_result.get("response", pref_result)
-                pref_meta = pref.get("metadata") or {}
-                user_id = user_id or pref_meta.get("user_id")
-                report_hash = report_hash or pref_meta.get("report_hash")
-
-        if status == "approved" and user_id and report_hash:
-            if purchase_analysis(int(user_id), report_hash, payment_id):
-                track_event("analysis_purchased", int(user_id), "", report_hash)
-                log.info(f"Usuario {user_id} compro analisis {report_hash} via webhook")
-            else:
-                log.info(f"Compra duplicada: user={user_id} report={report_hash}")
-        else:
-            log.info(f"Webhook MP pago {payment_id}: status={status}")
-
-    except Exception as e:
-        log.exception("Error procesando webhook MP")
-        return jsonify({"error": str(e)}), 500
-
-    return jsonify({"status": "ok"})
-
-
-@app.route("/api/force-upgrade")
-def api_force_upgrade():
-    """Solo para testing — activa PRO manualmente al usuario actual."""
-    if not DEV_MODE:
-        return jsonify({"error": "No disponible en producción"}), 403
-    if not g.current_user:
-        return jsonify({"error": "Iniciá sesión primero"}), 401
-    upgrade_to_paid(g.current_user["id"])
-    track_event("user_upgraded", g.current_user["id"])
-    return jsonify({"tier": "paid", "message": "PRO activado manualmente"})
 
 
 @app.route("/checkout-success")
 def checkout_success():
-    # MP Checkout Pro redirige con: collection_id, collection_status, preference_id, external_reference, payment_id
-    payment_id = request.args.get("payment_id") or request.args.get("collection_id", "")
-    status = request.args.get("status") or request.args.get("collection_status", "")
-    preference_id = request.args.get("preference_id", "")
-    external_ref = request.args.get("external_reference", "")
-    purchased = False
-    report_hash = ""
-    analyze_url = ""
+    """Página de bienvenida post-registro/login."""
+    return redirect("/?welcome=1", code=302)
 
-    if _mp and MP_ACCESS_TOKEN and status == "approved":
-        sdk = _mp.SDK(MP_ACCESS_TOKEN)
-        payment = None
 
-        try:
-            if payment_id:
-                result = sdk.payment().get(payment_id)
-                payment = result.get("response", result)
-        except Exception:
-            pass
+# =============================================================================
+# Feedback (reemplaza compras)
+# =============================================================================
 
-        if not payment and external_ref:
-            try:
-                search = sdk.payment().search({"external_reference": external_ref})
-                results = search.get("response", {}).get("results", [])
-                if results:
-                    payment = results[0]
-                    payment_id = payment.get("id", payment_id)
-            except Exception as e:
-                log.warning(f"Error buscando pago MP en success: {e}")
 
-        if payment:
-            try:
-                metadata = payment.get("metadata") or {}
-                user_id = metadata.get("user_id")
-                report_hash = metadata.get("report_hash")
-                if user_id and report_hash and payment.get("status") == "approved":
-                    purchase_analysis(int(user_id), report_hash, payment_id)
-                    track_event("analysis_purchased", int(user_id), "", report_hash)
-                    log.info(f"Usuario {user_id} compro analisis {report_hash} (success page)")
-                    purchased = True
-                    # Obtener la URL analizada para redirigir al usuario a sus resultados
-                    shared = get_shared_report(report_hash)
-                    if shared:
-                        analyze_url = shared.get("url", "")
-            except Exception as e:
-                log.warning(f"Error registrando compra en success: {e}")
+@app.route("/api/feedback", methods=["POST"])
+@limiter.limit("10 per minute")
+def api_feedback():
+    """Encuesta corta antes de descargar. Requiere autenticacion."""
+    if not g.current_user:
+        return jsonify({"error": "Autenticacion requerida"}), 401
 
-    if purchased and analyze_url:
-        from urllib.parse import quote
-        return redirect(f"/?analyze_url={quote(analyze_url, safe='')}&purchased=1", code=302)
+    data = request.get_json(force=True)
+    report_hash = (data.get("report_hash") or "").strip()
+    rating = data.get("rating")
+    comentario = (data.get("comentario") or "").strip()[:200]
+    recibir_updates = bool(data.get("recibir_updates", False))
 
-    return render_template("checkout-success.html", payment_id=payment_id, upgraded=purchased, report_hash=report_hash)
+    if not report_hash:
+        return jsonify({"error": "report_hash requerido"}), 400
+    if not isinstance(rating, int) or rating < 1 or rating > 5:
+        return jsonify({"error": "rating debe ser un numero entre 1 y 5"}), 400
+
+    user_id = g.current_user["id"]
+
+    try:
+        track_event("feedback_submitted", user_id, "",
+                    json.dumps({"report_hash": report_hash, "rating": rating, "comentario": comentario}))
+
+        if recibir_updates:
+            set_receive_updates(user_id, True)
+
+        log.info(f"trace={g.trace_id} user={user_id} feedback rating={rating} hash={report_hash}")
+    except Exception as e:
+        log.exception("Error guardando feedback")
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"ok": True})
 
 
 # =============================================================================
@@ -533,7 +397,6 @@ def api_analyze():
 
     report_hash = hashlib.sha256(url.encode()).hexdigest()[:12]
     user_id = g.current_user["id"] if g.current_user else None
-    user_tier = g.current_user["tier"] if g.current_user else "free"
 
     # DB operations son best-effort: si fallan, igual devolvemos el análisis
     try:
@@ -549,8 +412,7 @@ def api_analyze():
     except Exception as db_err:
         log.exception(f"trace={g.trace_id} url={url} Error guardando en DB (análisis igual se entrega)")
 
-    purchased = user_id and (user_tier == "paid" or _has_purchased_safe(user_id, report_hash))
-
+    # Todas las soluciones libres (sin pasarela de pago)
     soluciones = resultado.get("soluciones", [])
     soluciones_out = [
         {
@@ -558,7 +420,7 @@ def api_analyze():
             "tipo": s["tipo"],
             "descripcion": s["descripcion"],
             "path": s.get("path", ""),
-            "bloqueado": not purchased and s["tipo"] in ("zip", "json"),
+            "bloqueado": False,
         }
         for s in soluciones
     ]
@@ -583,7 +445,6 @@ def api_analyze():
         "soluciones": soluciones_out,
         "errores": resultado.get("errores", []),
         "report_hash": report_hash,
-        "purchased": purchased,
         "report_url": f"/r/{report_hash}",
         "paginas": resultado.get("paginas", []),
         "promedio_sitio": resultado.get("promedio_sitio", promedio),
@@ -606,21 +467,19 @@ def api_download(filename):
     ext = os.path.splitext(filename)[1].lower()
     es_premium = ext in (".zip", ".json")
 
-    # Verificar compra: tier 'paid' (legacy) O compró este análisis
-    # En modo desarrollo (local) las descargas están liberadas
-    # Solo .zip y .json requieren pago; .html, .md, .liquid son gratis
-    has_access = DEV_MODE
-    if not has_access and g.current_user:
-        if g.current_user.get("tier") == "paid":
-            has_access = True
-        elif report_hash and _has_purchased_safe(g.current_user["id"], report_hash):
-            has_access = True
-
-    if es_premium and not has_access:
-        return jsonify({
-            "error": "Descarga exclusiva — comprá el análisis por ARS 12.000",
-            "action": "purchase",
-        }), 402
+    # Premium (.zip, .json): requiere auth + feedback
+    # No-premium (.html, .md, .liquid): libre
+    if es_premium and not DEV_MODE:
+        if not g.current_user:
+            return jsonify({
+                "error": "Autenticacion requerida para descargar",
+                "code": "AUTH_REQUIRED",
+            }), 401
+        if report_hash and not has_submitted_feedback(g.current_user["id"], report_hash):
+            return jsonify({
+                "error": "Completa la encuesta para descargar",
+                "action": "feedback_required",
+            }), 403
 
     safe = os.path.basename(filename)
     path = (OUTPUT_DIR / safe).resolve()
@@ -752,13 +611,6 @@ def api_health():
 # =============================================================================
 # Helpers
 # =============================================================================
-
-
-def _has_purchased_safe(user_id, report_hash):
-    try:
-        return has_purchased(user_id, report_hash)
-    except Exception:
-        return False
 
 
 def _color(score):

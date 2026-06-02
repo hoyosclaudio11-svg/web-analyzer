@@ -24,11 +24,14 @@
   <!-- HERO -->
   <section class="hero-section">
     <h1 class="hero-title">¿Tu web <span style="color:var(--red)">pierde clientes</span> y no sabés por qué?</h1>
-    <p class="hero-desc">Analizá cualquier sitio <strong>gratis y sin registro</strong>. En 30 segundos tenés una auditoría en 5 categorías con puntaje, hallazgos y soluciones que podés descargar como plugin para WordPress.</p>
+    <p class="hero-desc">Analizá cualquier sitio <strong>100% gratis</strong>. En 30 segundos tenés una auditoría en 5 categorías con puntaje, hallazgos y soluciones que podés descargar como plugin para WordPress.</p>
     <div class="hero-stats" id="hero-stats">
       <div class="hero-stat"><span class="hero-stat-num" id="stat-analyses">—</span><span class="hero-stat-label">análisis realizados</span></div>
       <div class="hero-stat"><span class="hero-stat-num" id="stat-pages">—</span><span class="hero-stat-label">páginas auditadas</span></div>
       <div class="hero-stat"><span class="hero-stat-num">30s</span><span class="hero-stat-label">por diagnóstico</span></div>
+    </div>
+    <div style="text-align:center;margin-top:20px">
+      <span class="launch-banner">🎉 Semana de lanzamiento — Análisis 100% gratis. Sin tarjeta, sin compromiso. Aprovechá antes de que implementemos el plan pago.</span>
     </div>
   </section>
 
@@ -49,7 +52,7 @@
       <div class="step-card">
         <div class="step-num">3</div>
         <h3>Descargá e instalá</h3>
-        <p>¿Necesitás corregir los problemas ya? Comprá el análisis PRO por <strong>ARS 12.000</strong> y recibís el plugin .zip que lo arregla solo.</p>
+        <p>Descargá el plugin WordPress .zip gratis. Instalalo en 1 clic y todas las correcciones se aplican automáticamente. Sin costo.</p>
       </div>
     </div>
   </section>
@@ -67,7 +70,7 @@
         Detectar problemas
       </button>
     </form>
-    <p id="input-hint" class="input-hint">Sin registro. Sin costo. Descubrí en 30 segundos qué frena a tu sitio.</p>
+    <p id="input-hint" class="input-hint">100% gratis. Descubrí en 30 segundos qué frena a tu sitio.</p>
   </section>
 
   <!-- LOADING -->
@@ -78,9 +81,6 @@
 
   <!-- ERROR -->
   <div id="error-box" class="error-box" style="display:none"></div>
-
-  <!-- UPGRADE BANNER (aparece dentro de resultados via JS) -->
-  <div id="upgrade-banner" class="upgrade-banner" style="display:none"></div>
 
   <!-- RESULTADOS -->
   <div id="results" style="display:none">
@@ -179,42 +179,22 @@
     </div>
   </section>
 
-  <!-- PRICING -->
+  <!-- PRICING — Lanzamiento gratis -->
   <section class="pricing-section" id="pricing">
-    <h2 class="section-title">Planes</h2>
-    <p class="section-sub">Pago único por análisis. Sin suscripciones. Sin letra chica.</p>
-    <div class="pricing-grid">
-      <div class="pricing-card">
-        <div class="pricing-header">Gratis</div>
-        <div class="pricing-price">$0</div>
-        <div class="pricing-sub">siempre</div>
-        <ul class="pricing-features">
-          <li>Análisis completo ilimitado</li>
-          <li>Scorecard 0-10 en 5 categorías</li>
-          <li>Hallazgos y recomendaciones</li>
-          <li>Guía SEO en markdown (.md)</li>
-          <li>Link público compartible</li>
-        </ul>
-        <a href="#input-section" class="btn-pricing-outline">Comenzar gratis</a>
-      </div>
-      <div class="pricing-card pricing-pro">
-        <div class="pricing-badge">PRO</div>
-        <div class="pricing-header">PRO</div>
-        <div class="pricing-price">ARS 12.000</div>
-        <div class="pricing-sub">pago único por análisis</div>
-        <ul class="pricing-features">
-          <li>Todo lo del plan Gratis</li>
-          <li>Plugin WordPress (.zip) instalable</li>
-          <li>Archivos HTML corregidos</li>
-          <li>Reporte JSON completo</li>
-          <li>Soporte por email prioritario</li>
-        </ul>
-        <div class="trust-seal" style="font-size:12px;color:var(--text2);margin-bottom:12px;text-align:left;line-height:1.8">
-          <div>✅ Compatible con WordPress 6.x · No modifica tu base de datos</div>
-          <div>✅ Desinstalable en 1 clic · Garantía 7 días si no mejora el puntaje</div>
-        </div>
-        <a href="#input-section" class="btn-pricing-cta">Arreglar mi web ahora</a>
-      </div>
+    <h2 class="section-title">Precio</h2>
+    <p class="section-sub">Por tiempo limitado, todo es gratis. Sin suscripciones. Sin letra chica.</p>
+    <div style="max-width:600px;margin:28px auto 0;padding:36px 24px;background:var(--bg2);border:2px solid var(--green);border-radius:12px;text-align:center">
+      <div style="font-size:40px;font-weight:800;color:var(--green);margin-bottom:4px">$0</div>
+      <div style="font-size:14px;color:var(--text2);margin-bottom:20px">para siempre en tu cuenta</div>
+      <ul style="list-style:none;text-align:left;max-width:400px;margin:0 auto 24px;padding:0">
+        <li style="padding:7px 0;font-size:13px;color:var(--text2);border-bottom:1px solid rgba(48,54,61,0.3)">✅ Análisis completo ilimitado</li>
+        <li style="padding:7px 0;font-size:13px;color:var(--text2);border-bottom:1px solid rgba(48,54,61,0.3)">✅ Scorecard 0-10 en 5 categorías</li>
+        <li style="padding:7px 0;font-size:13px;color:var(--text2);border-bottom:1px solid rgba(48,54,61,0.3)">✅ Plugin WordPress (.zip) instalable</li>
+        <li style="padding:7px 0;font-size:13px;color:var(--text2);border-bottom:1px solid rgba(48,54,61,0.3)">✅ Archivos HTML corregidos</li>
+        <li style="padding:7px 0;font-size:13px;color:var(--text2);border-bottom:1px solid rgba(48,54,61,0.3)">✅ Reporte JSON completo</li>
+        <li style="padding:7px 0;font-size:13px;color:var(--text2)">✅ Sin tarjeta de crédito</li>
+      </ul>
+      <p style="font-size:12px;color:var(--text3);margin:0">🎉 Lanzamiento — análisis 100% gratis. Aprovechá antes de que implementemos el plan pago.</p>
     </div>
   </section>
 
@@ -250,8 +230,8 @@
         <div class="faq-a">Corrige automáticamente problemas técnicos detectados en el análisis: meta tags faltantes, imágenes sin lazy loading, falta de Open Graph, formularios sin labels, y más. Se instala en 1 clic desde WordPress.</div>
       </div>
       <div class="faq-item">
-        <div class="faq-q">¿Qué incluye el plan gratuito y qué el PRO?</div>
-        <div class="faq-a"><strong>Gratis:</strong> scorecard completo, hallazgos, recomendaciones, guía markdown y link público compartible. <strong>PRO (ARS 12.000):</strong> todo lo anterior + plugin WordPress .zip, archivos HTML corregidos y reporte JSON completo. Pago único por análisis, sin suscripción.</div>
+        <div class="faq-q">¿Cuesta algo el análisis?</div>
+        <div class="faq-a"><strong>No. Es 100% gratis.</strong> Incluye todo: análisis completo con scorecard, hallazgos, recomendaciones, plugin WordPress (.zip), archivos HTML corregidos y reporte JSON. Solo necesitás crear una cuenta gratuita para descargar los archivos.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">¿El plugin modifica el contenido de mis páginas?</div>
@@ -268,7 +248,7 @@
   <!-- FINAL CTA -->
   <section class="final-cta">
     <h2>¿Tu sitio está perdiendo clientes?</h2>
-    <p>Descubrilo en 30 segundos. Sin registro. Sin compromiso.</p>
+    <p>Descubrilo en 30 segundos. 100% gratis. Sin registro. Sin compromiso.</p>
     <a href="#input-section" class="btn-analyze" style="display:inline-block;font-size:16px;padding:16px 40px">Detectar problemas de mi sitio</a>
   </section>
 
@@ -303,7 +283,7 @@
     <div class="modal-content">
       <span class="modal-close" id="modal-close">&times;</span>
       <div id="auth-form-container">
-        <h3 id="auth-modal-title">Iniciá sesión para comprar</h3>
+        <h3 id="auth-modal-title">Creá tu cuenta gratis para descargar</h3>
         <form id="auth-form">
           <div class="form-group">
             <input type="email" id="auth-email" placeholder="Email" required>
@@ -316,6 +296,35 @@
         </form>
         <p class="auth-toggle-text">¿No tenés cuenta? <a href="#" id="auth-toggle">Registrate gratis</a></p>
       </div>
+    </div>
+  </div>
+
+  <!-- FEEDBACK MODAL -->
+  <div id="feedback-modal" class="modal" style="display:none">
+    <div class="modal-overlay"></div>
+    <div class="modal-content" style="max-width:440px;padding:28px;background:#141414;border:1px solid #333;border-radius:12px;text-align:center">
+      <h3 style="color:#fff;font-size:20px;margin:0 0 6px">¿Qué te pareció el análisis?</h3>
+      <p style="color:#888;font-size:13px;margin:0 0 20px">Tu opinión nos ayuda a mejorar. Es rapidísimo.</p>
+      <div id="star-rating" style="margin-bottom:16px">
+        <span class="star" data-rating="1">&#9733;</span>
+        <span class="star" data-rating="2">&#9733;</span>
+        <span class="star" data-rating="3">&#9733;</span>
+        <span class="star" data-rating="4">&#9733;</span>
+        <span class="star" data-rating="5">&#9733;</span>
+      </div>
+      <textarea id="feedback-comment" placeholder="¿Algo que quieras decirnos? (opcional)" maxlength="200"
+                style="width:100%;padding:12px;border:1px solid #444;border-radius:8px;font-size:13px;background:#0a0a0a;color:#fff;margin-bottom:12px;box-sizing:border-box;resize:vertical;min-height:60px;font-family:inherit"></textarea>
+      <div style="text-align:left;margin-bottom:16px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#888;cursor:pointer">
+          <input type="checkbox" id="feedback-updates" style="accent-color:#58a6ff">
+          Quiero recibir actualizaciones y tips por correo
+        </label>
+      </div>
+      <button id="feedback-submit-btn"
+              style="width:100%;padding:14px;background:#3fb950;color:#000;border:none;border-radius:8px;font-weight:bold;font-size:15px;cursor:pointer">
+        Listo, ver mis resultados
+      </button>
+      <p style="color:#666;font-size:11px;margin:12px 0 0">También podés <a href="#" id="feedback-skip" style="color:#58a6ff">verlo sin responder</a></p>
     </div>
   </div>
 

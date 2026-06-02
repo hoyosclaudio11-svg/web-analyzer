@@ -100,7 +100,7 @@ else:
 
     def _conn():
         if not hasattr(_local, "db"):
-            _local.db = sqlite3.connect(str(DB_PATH))
+            _local.db = sqlite3.connect(str(DB_PATH), timeout=30.0)
             _local.db.row_factory = sqlite3.Row
             _local.db.execute("PRAGMA journal_mode=WAL")
             _local.db.execute("PRAGMA foreign_keys=ON")
@@ -146,9 +146,12 @@ def init_db():
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 last_login TIMESTAMPTZ,
                 analyses_count INTEGER DEFAULT 0,
-                downloads_count INTEGER DEFAULT 0
+                downloads_count INTEGER DEFAULT 0,
+                receive_updates BOOLEAN NOT NULL DEFAULT FALSE
             );
         """)
+        # Migracion para bases existentes
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS receive_updates BOOLEAN NOT NULL DEFAULT FALSE;")
         c.execute("""
             CREATE TABLE IF NOT EXISTS shared_reports (
                 id TEXT PRIMARY KEY,
@@ -185,18 +188,8 @@ def init_db():
             );
         """)
         c.execute("CREATE INDEX IF NOT EXISTS idx_monitored_user ON monitored_urls(user_id);")
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS purchases (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                report_hash TEXT NOT NULL,
-                payment_id TEXT,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE(user_id, report_hash)
-            );
-        """)
-        c.execute("CREATE INDEX IF NOT EXISTS idx_purchases_user ON purchases(user_id);")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_purchases_report ON purchases(report_hash);")
+        # Tabla purchases eliminada (migracion a gratis)
+        c.execute("DROP TABLE IF EXISTS purchases;")
     else:
         c.executescript("""
             CREATE TABLE IF NOT EXISTS users (
@@ -209,7 +202,8 @@ def init_db():
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 last_login TEXT,
                 analyses_count INTEGER DEFAULT 0,
-                downloads_count INTEGER DEFAULT 0
+                downloads_count INTEGER DEFAULT 0,
+                receive_updates INTEGER DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS shared_reports (
@@ -246,19 +240,14 @@ def init_db():
             );
 
             CREATE INDEX IF NOT EXISTS idx_monitored_user ON monitored_urls(user_id);
-
-            CREATE TABLE IF NOT EXISTS purchases (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                report_hash TEXT NOT NULL,
-                payment_id TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                UNIQUE(user_id, report_hash)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_purchases_user ON purchases(user_id);
-            CREATE INDEX IF NOT EXISTS idx_purchases_report ON purchases(report_hash);
         """)
+        # Migracion para bases SQLite existentes
+        try:
+            c.execute("ALTER TABLE users ADD COLUMN receive_updates INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Columna ya existe
+        # Eliminar tabla purchases
+        c.execute("DROP TABLE IF EXISTS purchases;")
     c.commit()
 
 
@@ -322,45 +311,58 @@ def create_user(email: str, password: str) -> dict | None:
 
 
 def authenticate(email: str, password: str) -> dict | None:
-    c = _conn()
-    email = email.strip().lower()
-    row = c.execute(f"SELECT * FROM users WHERE email = {_q()}", (email,)).fetchone()
-    if not row:
-        return None
-    if not _verify_password(password, row["password_hash"]):
-        return None
+    try:
+        c = _conn()
+        email = email.strip().lower()
+        row = c.execute(f"SELECT * FROM users WHERE email = {_q()}", (email,)).fetchone()
+        if not row:
+            return None
+        if not _verify_password(password, row["password_hash"]):
+            return None
 
-    token = secrets.token_hex(32)
-    expires = (datetime.utcnow() + timedelta(days=30)).isoformat()
-    c.execute(
-        f"UPDATE users SET token = {_q()}, token_expires = {_q()}, last_login = {_NOW} WHERE id = {_q()}",
-        (token, expires, row["id"]),
-    )
-    c.commit()
-    return {"id": row["id"], "email": row["email"], "tier": row["tier"], "token": token}
+        token = secrets.token_hex(32)
+        expires = (datetime.utcnow() + timedelta(days=30)).isoformat()
+        c.execute(
+            f"UPDATE users SET token = {_q()}, token_expires = {_q()}, last_login = {_NOW} WHERE id = {_q()}",
+            (token, expires, row["id"]),
+        )
+        c.commit()
+        return {"id": row["id"], "email": row["email"], "tier": row["tier"], "token": token}
+    except Exception:
+        import logging
+        logging.getLogger("web-analyzer").exception("Error en authenticate")
+        try:
+            c.rollback() if PG else None
+        except Exception:
+            pass
+        return None
 
 
 def get_user_by_token(token: str) -> dict | None:
-    c = _conn()
-    row = c.execute(f"SELECT * FROM users WHERE token = {_q()}", (token,)).fetchone()
-    if not row:
+    try:
+        c = _conn()
+        row = c.execute(f"SELECT * FROM users WHERE token = {_q()}", (token,)).fetchone()
+        if not row:
+            return None
+        # token_expires puede ser string (SQLite) o datetime (PostgreSQL)
+        expires = row["token_expires"]
+        if expires:
+            if isinstance(expires, str):
+                expires = datetime.fromisoformat(expires)
+            # Si ya es datetime, usarlo directamente
+            if expires < datetime.utcnow():
+                return None
+        return dict(row)
+    except Exception:
+        import logging
+        logging.getLogger("web-analyzer").exception("Error en get_user_by_token")
         return None
-    if row["token_expires"] and datetime.fromisoformat(row["token_expires"]) < datetime.utcnow():
-        return None
-    return dict(row)
-
-
-def upgrade_to_paid(user_id: int) -> dict:
-    c = _conn()
-    c.execute(f"UPDATE users SET tier = 'paid' WHERE id = {_q()}", (user_id,))
-    c.commit()
-    return {"id": user_id, "tier": "paid"}
 
 
 def get_user_stats(user_id: int) -> dict:
     c = _conn()
     row = c.execute(
-        f"SELECT tier, analyses_count, downloads_count, created_at FROM users WHERE id = {_q()}",
+        f"SELECT tier, analyses_count, downloads_count, receive_updates, created_at FROM users WHERE id = {_q()}",
         (user_id,),
     ).fetchone()
     return dict(row) if row else {}
@@ -379,51 +381,24 @@ def increment_downloads(user_id: int) -> None:
 
 
 # =============================================================================
-# Compras por analisis (MercadoPago)
+# Feedback (reemplaza compras)
 # =============================================================================
 
-def purchase_analysis(user_id: int, report_hash: str, payment_id: str = "") -> bool:
-    c = _conn()
-    try:
-        if PG:
-            c.execute(
-                "INSERT INTO purchases (user_id, report_hash, payment_id) VALUES (%s, %s, %s) ON CONFLICT (user_id, report_hash) DO NOTHING",
-                (user_id, report_hash, payment_id),
-            )
-        else:
-            c.execute(
-                f"INSERT OR IGNORE INTO purchases (user_id, report_hash, payment_id) VALUES ({_q()}, {_q()}, {_q()})",
-                (user_id, report_hash, payment_id),
-            )
-        c.commit()
-        if c.rowcount == 0:
-            return False
-        increment_analyses(user_id)
-        return True
-    except Exception:
-        try:
-            c.rollback() if PG else None
-        except Exception:
-            pass
-        return False
-
-
-def has_purchased(user_id: int, report_hash: str) -> bool:
+def has_submitted_feedback(user_id: int, report_hash: str) -> bool:
+    """Verifica si el usuario ya envio feedback para un report_hash."""
     c = _conn()
     row = c.execute(
-        f"SELECT 1 FROM purchases WHERE user_id = {_q()} AND report_hash = {_q()}",
-        (user_id, report_hash),
+        f"SELECT 1 FROM analytics_events WHERE user_id = {_q()} AND event = 'feedback_submitted' AND metadata LIKE {_q()}",
+        (user_id, f"%{report_hash}%"),
     ).fetchone()
     return row is not None
 
 
-def get_purchased_reports(user_id: int) -> list[str]:
+def set_receive_updates(user_id: int, value: bool) -> None:
+    """Actualiza la preferencia de recibir actualizaciones por email."""
     c = _conn()
-    rows = c.execute(
-        f"SELECT report_hash FROM purchases WHERE user_id = {_q()} ORDER BY created_at DESC",
-        (user_id,),
-    ).fetchall()
-    return [r["report_hash"] for r in rows]
+    c.execute(f"UPDATE users SET receive_updates = {_q()} WHERE id = {_q()}", (int(value), user_id))
+    c.commit()
 
 
 # =============================================================================
@@ -526,12 +501,12 @@ def delete_monitored_url(monitor_id: int, user_id: int) -> bool:
 def get_public_stats() -> dict:
     c = _conn()
     total_analyses = c.execute(
-        "SELECT COUNT(*) FROM analytics_events WHERE event = 'analysis_completed'"
+        "SELECT COUNT(*) AS count FROM analytics_events WHERE event = 'analysis_completed'"
     ).fetchone()["count"]
     total_downloads = c.execute(
-        "SELECT COUNT(*) FROM analytics_events WHERE event = 'plugin_downloaded'"
+        "SELECT COUNT(*) AS count FROM analytics_events WHERE event = 'plugin_downloaded'"
     ).fetchone()["count"]
-    total_reports = c.execute("SELECT COUNT(*) FROM shared_reports").fetchone()["count"]
+    total_reports = c.execute("SELECT COUNT(*) AS count FROM shared_reports").fetchone()["count"]
     return {
         "analyses": total_analyses,
         "downloads": total_downloads,
