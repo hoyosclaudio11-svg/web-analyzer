@@ -328,7 +328,13 @@ function renderResults(data) {
   if (data.hallazgos && data.hallazgos.length) {
     var preview = data.hallazgos.slice(0, 2);
     $('#hallazgos-body').innerHTML = '<h3 style="color:#ff6b6b;margin-bottom:12px">Problemas encontrados en tu web</h3>' +
-      preview.map(function(h) { return '<div class="hallazgo-item">' + h + '</div>'; }).join('');
+      preview.map(function(h) {
+        var problema = typeof h === 'object' ? (h.problema || h.titulo || JSON.stringify(h)) : h;
+        var categoria = typeof h === 'object' ? (h.categoria || '') : '';
+        var gravedad = typeof h === 'object' ? (h.gravedad || '') : '';
+        var header = categoria ? '<div class="hal-cat">' + esc(categoria) + (gravedad ? ' — ' + esc(gravedad) : '') + '</div>' : '';
+        return '<div class="hallazgo-item">' + header + '<strong>' + esc(problema) + '</strong></div>';
+      }).join('');
   }
   // Ocultar el resto
   document.querySelectorAll('#recomendaciones-body, #soluciones-body, #next-steps-body, #next-steps-card, #meta-body, #imagenes-body, #scripts-body, #forms-body, .soluciones-card, .tech-bar, .details-grid').forEach(function(el) { if(el) el.style.display = 'none'; });
@@ -337,7 +343,7 @@ function renderResults(data) {
 }
 
 function showEmailGate() {
-  $('#email-gate-modal').style.display = 'block';
+  $('#email-gate-modal').style.display = 'flex';
 }
 
 function hideEmailGate() {
@@ -392,6 +398,14 @@ document.addEventListener('DOMContentLoaded', function() {
   if (skip) {
     skip.addEventListener('click', function(e) {
       e.preventDefault();
+      hideEmailGate();
+      if (pendingData) renderFullResults(pendingData);
+    });
+  }
+  // Cerrar modal al hacer clic en el overlay
+  var gateModal = document.getElementById('email-gate-modal');
+  if (gateModal) {
+    gateModal.querySelector('.modal-overlay')?.addEventListener('click', function() {
       hideEmailGate();
       if (pendingData) renderFullResults(pendingData);
     });
