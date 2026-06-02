@@ -10,6 +10,7 @@ const $$ = (sel) => document.querySelectorAll(sel);
 
 // ---------- State ----------
 let currentReportHash = null;
+let pendingDownloadUrl = null;  // URL pendiente de descarga (para reintentar post-auth/feedback)
 
 function getUserToken() {
   return localStorage.getItem('wa_token') || '';
@@ -194,15 +195,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       showNotification(authMode === 'login' ? '¡Bienvenido de nuevo!' : '¡Cuenta creada! Ya podés descargar.');
 
-      // Continuar flujo pendiente: feedback o resultados completos
+      // Continuar flujo pendiente
       var dataToResume = feedbackData || pendingData;
       if (dataToResume) {
-        // Si ya está logueado, mostrar feedback o resultados
-        if (getUserToken()) {
-          checkFeedbackAndProceed(dataToResume);
-        } else {
-          renderFullResults(dataToResume);
-        }
+        checkFeedbackAndProceed(dataToResume);
+      }
+      // Reintentar descarga pendiente si la habia
+      if (pendingDownloadUrl) {
+        setTimeout(function() { triggerDownload(pendingDownloadUrl); }, 500);
       }
     } catch (err) {
       showAuthError('Error de conexión. Probá de nuevo.');
@@ -808,6 +808,10 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       hideFeedbackModal();
       if (feedbackData) renderFullResults(feedbackData);
+      // Reintentar descarga pendiente si la habia
+      if (pendingDownloadUrl) {
+        setTimeout(function() { triggerDownload(pendingDownloadUrl); }, 500);
+      }
     });
   }
 
@@ -837,6 +841,49 @@ function openAuthModalForFeedback(data) {
   openAuthModal();
 }
 
+// Funcion que ejecuta la descarga via fetch + blob
+async function triggerDownload(url) {
+  try {
+    var resp = await fetch(url);
+    if (resp.status === 403) {
+      var data = await resp.json();
+      if (data.action === 'feedback_required') {
+        pendingDownloadUrl = url;
+        showFeedbackModal(feedbackData || pendingData || { report_hash: currentReportHash }, true);
+      } else {
+        showNotification(data.error || 'Acceso denegado.');
+        pendingDownloadUrl = null;
+      }
+      return;
+    }
+    if (resp.status === 401) {
+      pendingDownloadUrl = url;
+      openAuthModalForFeedback(feedbackData || pendingData || { report_hash: currentReportHash });
+      return;
+    }
+    if (resp.ok) {
+      pendingDownloadUrl = null;
+      var blob = await resp.blob();
+      var objUrl = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = objUrl;
+      a.download = url.split('/').pop().split('?')[0];
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objUrl);
+      showNotification('✅ Descarga iniciada.');
+    } else {
+      var errData = await resp.json().catch(function() { return {}; });
+      showNotification(errData.error || 'Error al descargar.');
+      pendingDownloadUrl = null;
+    }
+  } catch (err) {
+    showNotification('Error de conexion al descargar.');
+    pendingDownloadUrl = null;
+  }
+}
+
 // Interceptar clicks en descargas premium para manejar auth/feedback
 document.addEventListener('click', async function(e) {
   var link = e.target.closest('a[href*="/api/download/"]');
@@ -848,38 +895,7 @@ document.addEventListener('click', async function(e) {
   if (!isPremium) return;
 
   e.preventDefault();
-  try {
-    var resp = await fetch(href);
-    if (resp.status === 403) {
-      var data = await resp.json();
-      if (data.action === 'feedback_required') {
-        showFeedbackModal(feedbackData || pendingData || { report_hash: currentReportHash }, true);
-      } else {
-        showNotification(data.error || 'Acceso denegado.');
-      }
-      return;
-    }
-    if (resp.status === 401) {
-      openAuthModalForFeedback(feedbackData || pendingData || { report_hash: currentReportHash });
-      return;
-    }
-    if (resp.ok) {
-      var blob = await resp.blob();
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = href.split('/').pop().split('?')[0];
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } else {
-      var errData = await resp.json().catch(function() { return {}; });
-      showNotification(errData.error || 'Error al descargar.');
-    }
-  } catch (err) {
-    showNotification('Error de conexion al descargar.');
-  }
+  triggerDownload(href);
 });
 
 // =============================================================================
