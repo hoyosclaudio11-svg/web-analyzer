@@ -1,0 +1,30 @@
+=== BUSCANDO 'latest_posts' EN TODA LA DB ===
+
+ID=866 type=page title=Inicio
+  content: <!-- wp:cover {"dimRatio":50,"overlayColor":"black","minHeight":450,"align":"full","className":"river-hero"} -->
+<div class="wp-block-cover alignfull river-hero" style="min-height:450px"><div class="wp-block-cover__inner-container">
+<h1 class="has-text-align-center has-white-color" style="font-size:
+
+ID=875 type=page title=Noticias
+  content: <!-- wp:heading {"className":"river-section-title"} --><h2>Noticias de River Plate</h2><!-- /wp:heading -->
+<!-- wp:shortcode -->[latest_posts number="12" columns="2"]<!-- /wp:shortcode -->
+
+ID=884 type=revision title=Inicio
+  content: <!-- wp:cover {"dimRatio":50,"overlayColor":"black","minHeight":450,"align":"full","className":"river-hero"} -->
+<div class="wp-block-cover alignfull river-hero" style="min-height:450px"><div class="wp-block-cover__inner-container">
+<h1 class="has-text-align-center has-white-color" style="font-size:
+
+ID=959 type=revision title=Inicio
+  content: <!-- wp:cover {"dimRatio":50,"overlayColor":"black","minHeight":450,"align":"full","className":"river-hero"} -->
+<div class="wp-block-cover alignfull river-hero" style="min-height:450px"><div class="wp-block-cover__inner-container">
+<h1 class="has-text-align-center has-white-color" style="font-size:
+
+
+=== BUSCANDO EN WIDGET DATA ===
+
+=== PRIMEROS 3 POSTS PUBLICADOS ===
+  ID=857: Dormir en el Monumental: cómo participar de la noche en River Plate (date=2026-05-14 23:02:53)
+  ID=848: River confirma grave lesión de joya de inferiores: el mensaje (date=2026-05-14 23:01:59)
+  ID=839: Agustín Ruberto sufre grave lesión en River: el parte médico (date=2026-05-14 23:01:19)
+
+=== FIN ===

@@ -19,6 +19,7 @@ import uuid
 import hashlib
 import time
 import logging
+import traceback
 import requests
 from datetime import datetime
 
@@ -273,7 +274,9 @@ def api_register():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": f"Error DB: {e}"}), 500
+        import traceback
+        log.error(f"Error en registro: {traceback.format_exc()}")
+        return jsonify({"error": f"Error interno: {e}"}), 500
     if not user:
         return jsonify({"error": "El email ya está registrado"}), 409
     track_event("user_registered", user["id"])

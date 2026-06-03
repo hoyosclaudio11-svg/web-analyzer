@@ -1,0 +1,41 @@
+{
+  "sitios": [
+    "www.mercadolibre.com.mx",
+    "www.lanacion.com.ar",
+    "www.ole.com.ar",
+    "es.wikipedia.org",
+    "www.yahoo.com",
+    "www.bocajuniors.com.ar",
+    "www.latercera.com",
+    "www.uade.edu.ar",
+    "www.cronista.com",
+    "one-piece.com",
+    "www.clarin.com",
+    "www.argentina.gob.ar",
+    "www.booking.com",
+    "www.eltiempo.com",
+    "www.mercadolibre.com.ar",
+    "www.stackoverflow.com",
+    "www.pagina12.com.ar",
+    "www.uol.com.br",
+    "www.wikipedia.org",
+    "www.ambito.com",
+    "www.tycsports.com"
+  ],
+  "educativos": [
+    "formularios-accesibles-web",
+    "javascript-bloqueante-rendimiento",
+    "plugins-wordpress-menos-es-mas",
+    "https-candado-sitio-seguro",
+    "sitios-grandes-rendimiento-bajo",
+    "core-web-vitals-google",
+    "wordpress-tema-liviano"
+  ],
+  "vs": [
+    "www.latercera.com|www.eluniversal.com.mx",
+    "www.wikipedia.org|es.wikipedia.org",
+    "www.infobae.com|www.clarin.com",
+    "www.mercadolibre.com.ar|www.mercadolibre.com.mx",
+    "www.cariverplate.com.ar|www.bocajuniors.com.ar"
+  ]
+}

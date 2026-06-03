@@ -1,0 +1,26 @@
+=== TODOS LOS WIDGETS Y SU CONTENIDO ===
+
+=== sidebar-1 ===
+  [search-2] type=search
+    title: 
+  [recent-posts-2] type=recent-posts
+    title: 
+  [recent-comments-2] type=recent-comments
+    title: 
+  [categories-2] type=categories
+    title: 
+  [block-3] type=block
+    content: <div style="background:#f8f9fa;padding:16px;border-radius:10px;border-left:5px solid
+  #e63946;font-family:Arial,sans-serif;margin:0">
+  <h3 style="margin:0 0 8px;font-size:15px;color:#1a1a1a">📩 River en tu mail</h3>
+  <p style="margin:0 0 12px;font-size:12px;color:#555">Lo mejor de River, todos ...
+
+=== CUANTOS POSTS HAY? ===
+Posts: 168 publicados, 1 borrador
+
+=== FRONT PAGE SETTINGS ===
+show_on_front: page
+page_on_front: 866
+page_for_posts: 0
+
+=== FIN ===

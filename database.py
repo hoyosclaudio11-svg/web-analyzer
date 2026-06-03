@@ -302,14 +302,14 @@ def create_user(email: str, password: str) -> dict | None:
         c.rollback() if PG else None
         return None
     except Exception as e:
-        # Log the real error
+        # Log and return None — let caller decide
         import logging, traceback
         logging.getLogger("web-analyzer").error(f"create_user FAILED: {e}\n{traceback.format_exc()}")
         try:
             c.rollback() if PG else None
         except Exception:
             pass
-        raise  # Re-raise to return 500 with real error instead of silent 409
+        return None
 
 
 def authenticate(email: str, password: str) -> dict | None:
@@ -337,7 +337,7 @@ def authenticate(email: str, password: str) -> dict | None:
             c.rollback() if PG else None
         except Exception:
             pass
-        raise  # Re-raise to expose real error as 500
+        return None
 
 
 def get_user_by_token(token: str) -> dict | None:

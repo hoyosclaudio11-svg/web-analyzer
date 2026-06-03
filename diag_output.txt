@@ -1,0 +1,98 @@
+=== 1. PLUGINS ===
+SportsPress: SI
+Plugin: PAP Afiliados Pro (activo: SI)
+  Path: pap-afiliados-pro/pap-afiliados-pro.php
+
+=== 2. SPORTSPRESS DATA ===
+  sp_team: 3
+  sp_player: 14
+  sp_event: 4
+  sp_list: 1
+  sp_table: 1
+  sp_staff: 1
+
+=== 3. PLAYERS ===
+  ID=920: #24 Enzo Pérez (Mediocampista)
+  ID=929: #11 Facundo Colidio (Delantero)
+  ID=1091: #2 Fausto Vera ()
+  ID=911: #1 Franco Armani (Arquero)
+  ID=917: #3 Germán Pezzella (Defensor)
+  ID=938: #18 Gonzalo Martínez (Mediocampista)
+  ID=1088: #1 Gonzalo Montiel ()
+  ID=923: #10 Ignacio Fernández (Mediocampista)
+  ID=935: #14 Leandro González Pirez (Defensor)
+  ID=926: #9 Miguel Borja (Delantero)
+  ID=941: #36 Pablo Solari (Delantero)
+  ID=914: #6 Paulo Díaz (Defensor)
+  ID=932: #29 Rodrigo Aliendro (Mediocampista)
+  ID=1094: #3 Sebastian Driusi ()
+
+=== 4. EVENTS ===
+  ID=968: River Plate vs San Lorenzo | 2026-05-17 19:30 | El Monumental
+  ID=971: River Plate vs Boca Juniors | 2026-05-24 17:00 | El Monumental
+  ID=974: Racing vs River Plate | 2026-05-31 21:00 | El Cilindro
+  ID=977: River Plate vs Independiente | 2026-06-07 20:00 | El Monumental
+
+=== 5. PLAYER LIST (ID=944) ===
+  Title: Plantilla River Plate
+  Players: 
+
+=== 6. LEAGUE TABLE (ID=947) ===
+  Title: Liga Profesional 2026
+  Teams: 
+
+=== 7. PAGES CONTENT ===
+--- /inicio (ID=866) ---
+<!-- wp:cover {"dimRatio":50,"overlayColor":"black","minHeight":450,"align":"full","className":"river-hero"} -->
+<div class="wp-block-cover alignfull river-hero" style="min-height:450px"><div class="wp-block-cover__inner-container">
+<h1 class="has-text-align-center has-white-color" style="font-size:48px;font-weight:900">Bienvenido al Club Atlético River Plate</h1>
+<p class="has-text-align-center has-white-color" style="font-size:20px">El Más Grande, Lejos</p>
+</div></div>
+<!-- /wp:cover -->
+
+<!-- wp:heading {"className":"river-section-title"} --><h2>Últimas Noticias</h2><!-- /wp:heading -->
+
+<!-- wp:latest-posts {"postsToShow":6,"displayPostDate":true,"displayFeaturedImage":true,"featuredImageSizeSlug":"medium","columns":3} /-->
+
+<!-- wp:heading {"className":"river-section-title"} --><h2>Próximo Partido</h2><!-- /wp:heading -->
+
+<!-- wp:shortcode -->[event_blocks status="future" number="1"]<!-- /wp:shortcode -->
+
+<!-- wp:heading {"className":"river-section-title"} --><h2>Último Resultado</h2><!-- /wp:heading -->
+
+<!-- wp:shortcode -->[event_blocks status="publish" number="1"]<!-- /wp:shortcode -->
+
+<!-- wp:heading {"className":"river-section-title"} --><h2>Tabla de Posiciones</h2><!-- /wp:heading -->
+
+<!-- wp:shortcode -->[league_table id="947"]<!-- /wp:shortcode -->
+
+--- /plantilla (ID=869) ---
+<!-- wp:heading {"className":"river-section-title"} --><h2>Plantilla Profesional</h2><!-- /wp:heading -->
+<!-- wp:paragraph --><p>Conocé a los jugadores del Más Grande.</p><!-- /wp:paragraph -->
+<!-- wp:shortcode -->[player_list id="944" columns="number,name,position,nationality"]<!-- /wp:shortcode -->
+
+--- /calendario (ID=872) ---
+<!-- wp:heading {"className":"river-section-title"} --><h2>Calendario de Partidos</h2><!-- /wp:heading -->
+<!-- wp:shortcode -->[event_list status="future" number="20"]<!-- /wp:shortcode -->
+<!-- wp:heading {"className":"river-section-title"} --><h2>Resultados</h2><!-- /wp:heading -->
+<!-- wp:shortcode -->[event_results number="20"]<!-- /wp:shortcode -->
+
+--- /noticias (ID=875) ---
+<!-- wp:heading {"className":"river-section-title"} --><h2>Noticias de River Plate</h2><!-- /wp:heading -->
+<!-- wp:latest-posts {"postsToShow":12,"displayPostContent":false,"displayPostDate":true,"displayFeaturedImage":true,"featuredImageSizeSlug":"medium","columns":2,"excerptLength":30} /-->
+
+--- /tienda (ID=878) ---
+<!-- wp:heading {"className":"river-section-title"} --><h2>Tienda Oficial</h2><!-- /wp:heading -->
+<!-- wp:paragraph --><p>Proximamente: camisetas oficiales, merchandising y mas productos del Mas Grande.</p><!-- /wp:paragraph -->
+
+--- /contacto (ID=881) ---
+<!-- wp:heading {"className":"river-section-title"} --><h2>Contacto</h2><!-- /wp:heading -->
+<!-- wp:paragraph --><p>Queres anunciar en River Plate Info? Tenes una primicia? Escribinos.</p><!-- /wp:paragraph -->
+<!-- wp:paragraph --><p>Email: info@riverplate-info.com.ar</p><!-- /wp:paragraph -->
+
+
+=== 8. SHORTCODES DISPONIBLES ===
+papafpro_produto, papafpro_produtos, papafpro_produtos_categoria, papafpro_produtos_recentes, papafpro_preset, papafpro_link, events-calendar, events-list, league-table, player-list, player-gallery, event_results, event_details, event_performance, event_venue, event_officials, event_teams, event_full, player_details, player_statistics, event_calendar, event_list, event_blocks, league_table, team_standings, team_gallery, player_list, player_gallery, wpay-register-team, wpay-register-player
+Total shortcodes: 43
+
+=== FIN ===

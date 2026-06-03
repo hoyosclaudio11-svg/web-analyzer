@@ -6,19 +6,40 @@ import json
 import pytest
 from unittest.mock import patch, Mock, MagicMock
 
-# Patch analyzer module before importing app
+# ---------------------------------------------------------------------------
+# Patch analyzer ANTES de importar app, y restaurarlo al finalizar la sesión
+# ---------------------------------------------------------------------------
 _analyzer_mock = MagicMock()
 _analyzer_mock.listar_analisis.return_value = []
-sys.modules["analyzer"] = _analyzer_mock
 
-from app import app
+
+@pytest.fixture(scope="session", autouse=True)
+def _patch_analyzer_module():
+    """Inyecta el mock de 'analyzer' sólo durante esta sesión de tests."""
+    original = sys.modules.get("analyzer")
+    sys.modules["analyzer"] = _analyzer_mock
+    # Importamos app aquí para que use el mock
+    import importlib
+    import app as _app_module  # noqa: F401 – side-effect: registra rutas
+    yield
+    if original is None:
+        sys.modules.pop("analyzer", None)
+    else:
+        sys.modules["analyzer"] = original
+
+
+from app import app  # noqa: E402 – importación después del patch
 
 
 @pytest.fixture
 def client():
     app.config["TESTING"] = True
+    import app as app_module
+    _original_dev = getattr(app_module, "DEV_MODE", False)
+    app_module.DEV_MODE = True
     with app.test_client() as c:
         yield c
+    app_module.DEV_MODE = _original_dev
 
 
 # =============================================================================

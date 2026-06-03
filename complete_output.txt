@@ -1,0 +1,193 @@
+=== COMPLETANDO RIVER PLATE INFO ===
+
+--- 1. CORRIGIENDO JUGADORES ---
+  OK: #1 Franco Armani (Arquero)
+  OK: #6 Paulo Díaz (Defensor)
+  OK: #3 Germán Pezzella (Defensor)
+  OK: #24 Enzo Pérez (Mediocampista)
+  OK: #10 Ignacio Fernández (Mediocampista)
+  OK: #9 Miguel Borja (Delantero)
+  OK: #11 Facundo Colidio (Delantero)
+  OK: #29 Rodrigo Aliendro (Mediocampista)
+  OK: #14 Leandro González Pirez (Defensor)
+  OK: #18 Gonzalo Martínez (Mediocampista)
+  OK: #36 Pablo Solari (Delantero)
+  OK: #4 Gonzalo Montiel (Defensor)
+  OK: #5 Fausto Vera (Mediocampista)
+  OK: #7 Sebastián Driussi (Delantero)
+
+--- 2. CREANDO MAS JUGADORES ---
+  OK: #25 Jeremías Ledesma (Arquero) ID=1109
+  OK: #21 Marcos Acuña (Defensor) ID=1112
+  OK: #16 Fabricio Bustos (Defensor) ID=1115
+  OK: #2 Ramiro Funes Mori (Defensor) ID=1118
+  OK: #20 Milton Casco (Defensor) ID=1121
+  OK: #8 Matías Kranevitter (Mediocampista) ID=1124
+  OK: #17 Giuliano Galoppo (Mediocampista) ID=1127
+  OK: #22 Maximiliano Meza (Mediocampista) ID=1130
+  OK: #30 Facundo Buonanotte (Mediocampista) ID=1133
+  OK: #32 Agustín Ruberto (Delantero) ID=1136
+  OK: #19 Ian Subiabre (Delantero) ID=1139
+
+--- 3. ASIGNANDO JUGADORES A LA LISTA ---
+  25 jugadores asignados a Plantilla (ID=944)
+
+--- 4. CREANDO EQUIPOS RIVALES ---
+  River Plate team ID=1085
+  20 equipos rivales listos
+
+--- 5. CREANDO FIXTURE COMPLETO ---
+  ✅ 2026-02-02: River Plate vs Belgrano (3-0) (ID=1199)
+  ✅ 2026-02-09: Central Córdoba vs River Plate (1-2) (ID=1202)
+  ✅ 2026-02-16: River Plate vs Racing Club (1-1) (ID=1205)
+  ✅ 2026-02-23: Banfield vs River Plate (0-3) (ID=1208)
+  ✅ 2026-03-02: River Plate vs Estudiantes LP (2-1) (ID=1211)
+  ✅ 2026-03-09: Huracán vs River Plate (1-1) (ID=1214)
+  ✅ 2026-03-16: River Plate vs Talleres (2-0) (ID=1217)
+  ✅ 2026-03-30: Newell's Old Boys vs River Plate (0-1) (ID=1220)
+  ✅ 2026-04-06: River Plate vs Rosario Central (3-1) (ID=1223)
+  ✅ 2026-04-13: Defensa y Justicia vs River Plate (2-4) (ID=1226)
+  ✅ 2026-04-20: River Plate vs Argentinos Juniors (1-0) (ID=1229)
+  ✅ 2026-04-27: Platense vs River Plate (0-0) (ID=1232)
+  ✅ 2026-05-04: River Plate vs Vélez Sarsfield (2-1) (ID=1235)
+  ✅ 2026-05-11: Sarmiento vs River Plate (0-3) (ID=1238)
+  ⏳ 2026-05-17: River Plate vs San Lorenzo (ID=1241)
+  ⏳ 2026-05-24: River Plate vs Boca Juniors (ID=1244)
+  ⏳ 2026-05-31: Racing Club vs River Plate (ID=1247)
+  ⏳ 2026-06-07: River Plate vs Independiente (ID=1250)
+  ⏳ 2026-06-14: Godoy Cruz vs River Plate (ID=1253)
+  Eliminado duplicado ID=968 (River Plate vs San Lorenzo)
+  Eliminado duplicado ID=971 (River Plate vs Boca Juniors)
+  Eliminado duplicado ID=977 (River Plate vs Independiente)
+
+--- 6. CONFIGURANDO TABLA DE POSICIONES ---
+  21 equipos asignados a la tabla (ID=947)
+
+--- 7. ACTUALIZANDO TIENDA OFICIAL ---
+  Tienda (ID=878) actualizada con productos PAF
+
+--- 8. ACTUALIZANDO PLANTILLA ---
+  Plantilla (ID=869) actualizada
+
+--- 9. ACTUALIZANDO INICIO ---
+<div class="sportspress"><div class="sp-template sp-template-event-blocks">
+	<div class="sp-table-wrapper">
+		<table class="sp-event-blocks sp-data-table
+					 sp-paginated-table" data-sp-rows="5">
+			<thead><tr><th></th></tr></thead> 			<tbody>
+				<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta name='robots' content='noindex, follow' />
+	<title>WordPress &rsaquo; Error</title>
+	<style type="text/css">
+		html {
+			background: #f1f1f1;
+		}
+		body {
+			background: #fff;
+			border: 1px solid #ccd0d4;
+			color: #444;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+			margin: 2em auto;
+			padding: 1em 2em;
+			max-width: 700px;
+			-webkit-box-shadow: 0 1px 1px rgba(0, 0, 0, .04);
+			box-shadow: 0 1px 1px rgba(0, 0, 0, .04);
+		}
+		h1 {
+			border-bottom: 1px solid #dadada;
+			clear: both;
+			color: #666;
+			font-size: 24px;
+			margin: 30px 0 0 0;
+			padding: 0;
+			padding-bottom: 7px;
+		}
+		#error-page {
+			margin-top: 50px;
+		}
+		#error-page p,
+		#error-page .wp-die-message {
+			font-size: 14px;
+			line-height: 1.5;
+			margin: 25px 0 20px;
+		}
+		#error-page code {
+			font-family: Consolas, Monaco, monospace;
+		}
+		ul li {
+			margin-bottom: 10px;
+			font-size: 14px ;
+		}
+		a {
+			color: #2271b1;
+		}
+		a:hover,
+		a:active {
+			color: #135e96;
+		}
+		a:focus {
+			color: #043959;
+			box-shadow: 0 0 0 2px #2271b1;
+			outline: 2px solid transparent;
+		}
+		.button {
+			background: #f3f5f6;
+			border: 1px solid #016087;
+			color: #016087;
+			display: inline-block;
+			text-decoration: none;
+			font-size: 13px;
+			line-height: 2;
+			height: 28px;
+			margin: 0;
+			padding: 0 10px 1px;
+			cursor: pointer;
+			-webkit-border-radius: 3px;
+			-webkit-appearance: none;
+			border-radius: 3px;
+			white-space: nowrap;
+			-webkit-box-sizing: border-box;
+			-moz-box-sizing:    border-box;
+			box-sizing:         border-box;
+
+			vertical-align: top;
+		}
+
+		.button.button-large {
+			line-height: 2.30769231;
+			min-height: 32px;
+			padding: 0 12px;
+		}
+
+		.button:hover,
+		.button:focus {
+			background: #f1f1f1;
+		}
+
+		.button:focus {
+			background: #f3f5f6;
+			border-color: #007cba;
+			-webkit-box-shadow: 0 0 0 1px #007cba;
+			box-shadow: 0 0 0 1px #007cba;
+			color: #016087;
+			outline: 2px solid transparent;
+			outline-offset: 0;
+		}
+
+		.button:active {
+			background: #f3f5f6;
+			border-color: #7e8993;
+			-webkit-box-shadow: none;
+			box-shadow: none;
+		}
+
+			</style>
+</head>
+<body id="error-page">
+	<div class="wp-die-message"><p>Ha habido un error crítico en esta web.</p><p><a href="https://wordpress.org/documentation/article/faq-troubleshooting/">Aprende más sobre el diagnóstico de WordPress.</a></p></div></body>
+</html>
+	

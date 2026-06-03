@@ -1,0 +1,148 @@
+=== DIAGNOSTICO PLANTILLA ===
+
+Player List ID=944
+sp_list: array(25) {
+  [0]=>
+  int(911)
+  [1]=>
+  int(914)
+  [2]=>
+  int(917)
+  [3]=>
+  int(920)
+  [4]=>
+  int(923)
+  [5]=>
+  int(926)
+  [6]=>
+  int(929)
+  [7]=>
+  int(932)
+  [8]=>
+  int(935)
+  [9]=>
+  int(938)
+  [10]=>
+  int(941)
+  [11]=>
+  int(1088)
+  [12]=>
+  int(1091)
+  [13]=>
+  int(1094)
+  [14]=>
+  int(1109)
+  [15]=>
+  int(1112)
+  [16]=>
+  int(1115)
+  [17]=>
+  int(1118)
+  [18]=>
+  int(1121)
+  [19]=>
+  int(1124)
+  [20]=>
+  int(1127)
+  [21]=>
+  int(1130)
+  [22]=>
+  int(1133)
+  [23]=>
+  int(1136)
+  [24]=>
+  int(1139)
+}
+sp_players: array(25) {
+  [0]=>
+  int(911)
+  [1]=>
+  int(914)
+  [2]=>
+  int(917)
+  [3]=>
+  int(920)
+  [4]=>
+  int(923)
+  [5]=>
+  int(926)
+  [6]=>
+  int(929)
+  [7]=>
+  int(932)
+  [8]=>
+  int(935)
+  [9]=>
+  int(938)
+  [10]=>
+  int(941)
+  [11]=>
+  int(1088)
+  [12]=>
+  int(1091)
+  [13]=>
+  int(1094)
+  [14]=>
+  int(1109)
+  [15]=>
+  int(1112)
+  [16]=>
+  int(1115)
+  [17]=>
+  int(1118)
+  [18]=>
+  int(1121)
+  [19]=>
+  int(1124)
+  [20]=>
+  int(1127)
+  [21]=>
+  int(1130)
+  [22]=>
+  int(1133)
+  [23]=>
+  int(1136)
+  [24]=>
+  int(1139)
+}
+
+All meta:
+  sp_players: a:25:{i:0;i:911;i:1;i:914;i:2;i:917;i:3;i:920;i:4;i:923;i:5;i:926;i:6;i:929;i:7;i:932;i:8;i:935;i:9;i:938;i:10;i:941;i:11;i:1088;i:12;i:1091;i:13;i:1094;i:14;i:1109;i:15;i:1112;i:16;i:1115;i:17;i:1118;i:18;i:1121;i:19;i:1124;i:20;i:1127;i:21;i:1130;i:22;i:1133;i:23;i:1136;i:24;i:1139;}
+  sp_team: 908
+  sp_list: a:25:{i:0;i:911;i:1;i:914;i:2;i:917;i:3;i:920;i:4;i:923;i:5;i:926;i:6;i:929;i:7;i:932;i:8;i:935;i:9;i:938;i:10;i:941;i:11;i:1088;i:12;i:1091;i:13;i:1094;i:14;i:1109;i:15;i:1112;i:16;i:1115;i:17;i:1118;i:18;i:1121;i:19;i:1124;i:20;i:1127;i:21;i:1130;i:22;i:1133;i:23;i:1136;i:24;i:1139;}
+
+Player ID=911 (Armani):
+  sp_team: 
+  sp_list: 
+
+=== PLAYERS IN DB ===
+Total: 25
+  ID=1136: #32 Agustín Ruberto (Delantero / Argentina)
+  ID=920: #24 Enzo Pérez (Mediocampista / Argentina)
+  ID=1115: #16 Fabricio Bustos (Defensor / Argentina)
+  ID=1133: #30 Facundo Buonanotte (Mediocampista / Argentina)
+  ID=929: #11 Facundo Colidio (Delantero / Argentina)
+  ID=1091: #5 Fausto Vera (Mediocampista / Argentina)
+  ID=911: #1 Franco Armani (Arquero / Argentina)
+  ID=917: #3 Germán Pezzella (Defensor / Argentina)
+  ID=1127: #17 Giuliano Galoppo (Mediocampista / Argentina)
+  ID=938: #18 Gonzalo Martínez (Mediocampista / Argentina)
+  ID=1088: #4 Gonzalo Montiel (Defensor / Argentina)
+  ID=1139: #19 Ian Subiabre (Delantero / Argentina)
+  ID=923: #10 Ignacio Fernández (Mediocampista / Argentina)
+  ID=1109: #25 Jeremías Ledesma (Arquero / Argentina)
+  ID=935: #14 Leandro González Pirez (Defensor / Argentina)
+  ID=1112: #21 Marcos Acuña (Defensor / Argentina)
+  ID=1124: #8 Matías Kranevitter (Mediocampista / Argentina)
+  ID=1130: #22 Maximiliano Meza (Mediocampista / Argentina)
+  ID=926: #9 Miguel Borja (Delantero / Colombia)
+  ID=1121: #20 Milton Casco (Defensor / Argentina)
+  ID=941: #36 Pablo Solari (Delantero / Argentina)
+  ID=914: #6 Paulo Díaz (Defensor / Chile)
+  ID=1118: #2 Ramiro Funes Mori (Defensor / Argentina)
+  ID=932: #29 Rodrigo Aliendro (Mediocampista / Argentina)
+  ID=1094: #7 Sebastián Driussi (Delantero / Argentina)
+
+=== SHORTCODE OUTPUT ===
+<div class="sportspress"><h4 class="sp-table-caption">Plantilla River Plate</h4></div>
+=== FIN ===
