@@ -600,18 +600,6 @@ def api_stats():
         return jsonify({"error": "Estadísticas no disponibles", "analyses": 0, "pages": 0, "users": 0}), 200
 
 
-@app.route("/api/debug-auth")
-def debug_auth():
-    """Debug: verificar que auth y DB funcionan."""
-    from database import get_user_stats
-    results = {"db": "postgres" if os.environ.get("DATABASE_URL") else "sqlite"}
-    try:
-        stats = get_user_stats(1)
-        results["user_1_stats"] = str(stats)[:100]
-    except Exception as e:
-        results["user_1_error"] = str(e)[:200]
-    return jsonify(results)
-
 @app.route("/api/health")
 def api_health():
     return jsonify({
