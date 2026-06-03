@@ -301,13 +301,15 @@ def create_user(email: str, password: str) -> dict | None:
     except (psycopg2.errors.UniqueViolation if PG else sqlite3.IntegrityError):
         c.rollback() if PG else None
         return None
-    except Exception:
-        # Fallback para otros motores o si psycopg2 no esta en scope
+    except Exception as e:
+        # Log the real error
+        import logging, traceback
+        logging.getLogger("web-analyzer").error(f"create_user FAILED: {e}\n{traceback.format_exc()}")
         try:
             c.rollback() if PG else None
         except Exception:
             pass
-        return None
+        raise  # Re-raise to return 500 with real error instead of silent 409
 
 
 def authenticate(email: str, password: str) -> dict | None:
@@ -329,13 +331,13 @@ def authenticate(email: str, password: str) -> dict | None:
         c.commit()
         return {"id": row["id"], "email": row["email"], "tier": row["tier"], "token": token}
     except Exception:
-        import logging
-        logging.getLogger("web-analyzer").exception("Error en authenticate")
+        import logging, traceback
+        logging.getLogger("web-analyzer").error(f"authenticate FAILED: {traceback.format_exc()}")
         try:
             c.rollback() if PG else None
         except Exception:
             pass
-        return None
+        raise  # Re-raise to expose real error as 500
 
 
 def get_user_by_token(token: str) -> dict | None:
