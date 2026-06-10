@@ -70,8 +70,23 @@ if PG:
     def _conn():
         if not hasattr(_local, "db"):
             conn = psycopg2.connect(_PG_URL)
+            conn.autocommit = False
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             _local.db = _PGCursor(conn, cur)
+        else:
+            # Health check: si la conexion murio (idle timeout de Neon), recrear
+            try:
+                _local.db.execute("SELECT 1")
+                _local.db.fetchone()
+            except Exception:
+                try:
+                    _local.db._conn.close()
+                except Exception:
+                    pass
+                conn = psycopg2.connect(_PG_URL)
+                conn.autocommit = False
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                _local.db = _PGCursor(conn, cur)
         return _local.db
 
     _PLACEHOLDER = "%s"
@@ -287,29 +302,42 @@ def create_user(email: str, password: str) -> dict | None:
         if PG:
             uid = _exec_insert(
                 c,
-                "INSERT INTO users (email, password_hash) VALUES (%s, %s)",
+                "INSERT INTO users (email, password_hash, receive_updates) VALUES (%s, %s, FALSE)",
                 (email, pw_hash),
             )
         else:
             cur = c.execute(
-                f"INSERT INTO users (email, password_hash) VALUES ({_q()}, {_q()})",
+                f"INSERT INTO users (email, password_hash, receive_updates) VALUES ({_q()}, {_q()}, 0)",
                 (email, pw_hash),
             )
             uid = cur.lastrowid
         c.commit()
+        if uid is None:
+            raise RuntimeError("INSERT no devolvio id — posible error de base de datos")
         return {"id": uid, "email": email, "tier": "free"}
     except (psycopg2.errors.UniqueViolation if PG else sqlite3.IntegrityError):
-        c.rollback() if PG else None
-        return None
-    except Exception as e:
-        # Log and return None — let caller decide
-        import logging, traceback
-        logging.getLogger("web-analyzer").error(f"create_user FAILED: {e}\n{traceback.format_exc()}")
+        # Solo este caso: email ya registrado
         try:
             c.rollback() if PG else None
         except Exception:
             pass
         return None
+    except Exception as e:
+        # Cualquier otro error: reconectar forzado para la proxima
+        import logging, traceback
+        logging.getLogger("web-analyzer").error(f"create_user FAILED ({type(e).__name__}): {e}\n{traceback.format_exc()}")
+        try:
+            c.rollback() if PG else None
+        except Exception:
+            pass
+        # Limpiar conexion stale para que la proxima reintente
+        if PG and hasattr(_local, "db"):
+            try:
+                _local.db._conn.close()
+            except Exception:
+                pass
+            del _local.db
+        raise RuntimeError(f"Error al crear usuario: {e}") from e
 
 
 def authenticate(email: str, password: str) -> dict | None:

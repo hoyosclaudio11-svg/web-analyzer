@@ -537,35 +537,48 @@ function renderNextSteps(data) {
   const mdFile = soluciones.find(s => s.tipo === 'markdown');
   const htmlFile = soluciones.find(s => s.tipo === 'html');
 
-  // Paso 1: descargar según plataforma
-  if (isWordPress && pluginFile) {
+  // Paso 1: descargar plugin ZIP (siempre disponible para cualquier sitio)
+  if (pluginFile) {
+    if (isWordPress) {
+      steps.push({
+        num: stepNum++,
+        title: `Descargá el plugin WordPress (.zip)`,
+        desc: `Hacé clic en <strong>"Descargar"</strong> en el archivo <strong>.zip</strong>. Es un plugin autocontenido listo para instalar que corrige automáticamente los problemas detectados.`,
+        action: 'descargar',
+        file: pluginFile,
+        cta: `Descargar ${pluginFile.nombre}`,
+      });
+      steps.push({
+        num: stepNum++,
+        title: 'Instalalo en WordPress',
+        desc: 'WordPress Admin → Plugins → Añadir nuevo → <strong>Subir plugin</strong> → Seleccioná el archivo .zip que descargaste → Instalar ahora → Activar.',
+        action: 'hacer',
+        cta: null,
+      });
+    } else {
+      steps.push({
+        num: stepNum++,
+        title: `Descargá el plugin corrector (.zip)`,
+        desc: `Aunque tu sitio no es WordPress, el archivo <strong>.zip</strong> contiene un plugin PHP con todas las correcciones listas para adaptar a tu CMS o sitio. Hacé clic en <strong>"Descargar"</strong>.`,
+        action: 'descargar',
+        file: pluginFile,
+        cta: `Descargar ${pluginFile.nombre}`,
+      });
+    }
+  }
+  // Paso complementario: archivos HTML corregidos
+  if (htmlFile) {
     steps.push({
       num: stepNum++,
-      title: `Descargá el plugin WordPress (.zip)`,
-      desc: `Hacé clic en <strong>"Descargar"</strong> en el archivo <strong>.zip</strong>. Es un plugin autocontenido listo para instalar que corrige automáticamente los problemas detectados.`,
-      action: 'descargar',
-      file: pluginFile,
-      cta: `Descargar ${pluginFile.nombre}`,
-    });
-    steps.push({
-      num: stepNum++,
-      title: 'Instalalo en WordPress',
-      desc: 'WordPress Admin → Plugins → Añadir nuevo → <strong>Subir plugin</strong> → Seleccioná el archivo .zip que descargaste → Instalar ahora → Activar.',
-      action: 'hacer',
-      cta: null,
-    });
-  } else if (htmlFile) {
-    steps.push({
-      num: stepNum++,
-      title: `Descargá los archivos corregidos`,
-      desc: `Hacé clic en <strong>"Descargar"</strong> en el archivo <strong>.html</strong>. Contiene fragmentos de HTML listos para copiar y pegar en tu sitio.`,
+      title: `Descargá los archivos HTML corregidos`,
+      desc: `El archivo <strong>.html</strong> contiene fragmentos listos para copiar y pegar en tu sitio. Ideal si preferís aplicar las correcciones manualmente.`,
       action: 'descargar',
       file: htmlFile,
       cta: `Descargar ${htmlFile.nombre}`,
     });
     steps.push({
       num: stepNum++,
-      title: 'Reemplazá el código en tu sitio',
+      title: 'Aplicá el código en tu sitio',
       desc: 'Abrí el archivo descargado. Copiá cada fragmento en la sección correspondiente del HTML de tu sitio. Si usás un CMS, pegá el código en el editor de templates.',
       action: 'hacer',
       cta: null,
