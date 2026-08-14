@@ -944,16 +944,18 @@ Agregar en el `<head>`:
 """,
     })
 
-    # --- Solucion 2: Plugin WordPress ZIP (siempre, para cualquier sitio) ---
-    plugin_code = _generar_plugin_wordpress(resultado, safe_domain)
-    plugin_zip = _crear_zip_plugin(safe_domain, plugin_code)
-    soluciones.append({
-        "nombre": f"{safe_domain}_optimizer.zip",
-        "tipo": "zip",
-        "descripcion": "Plugin WordPress listo para instalar. Descargar ZIP y subir a Plugins > Anadir nuevo > Subir plugin. Compatible con cualquier sitio WordPress.",
-        "contenido": plugin_zip,
-        "binario": True,
-    })
+    # --- Solucion 2: Plugin WordPress ZIP (solo si el sitio ES WordPress) ---
+    es_wordpress = any("WordPress" in t for t in tech)
+    if es_wordpress:
+        plugin_code = _generar_plugin_wordpress(resultado, safe_domain)
+        plugin_zip = _crear_zip_plugin(safe_domain, plugin_code)
+        soluciones.append({
+            "nombre": f"{safe_domain}_optimizer.zip",
+            "tipo": "zip",
+            "descripcion": "Plugin WordPress listo para instalar. Descargar ZIP y subir a Plugins > Anadir nuevo > Subir plugin.",
+            "contenido": plugin_zip,
+            "binario": True,
+        })
 
     # --- Solución 2b: Snippet Shopify si aplica ---
     if any("Shopify" in t for t in tech):
@@ -1001,6 +1003,35 @@ def _php_safe(value):
     return "".join(ch for ch in value if ch not in _PHP_UNSAFE_CHARS)
 
 
+_RUBROS_SENSIBLES_KEYWORDS = (
+    # Salud
+    "salud", "clínica", "clinica", "hospital", "médic", "medic", "doctor", "dental",
+    "odontolog", "psicolog", "terapia", "farmac", "cardio", "oncolog", "pediatr",
+    "ginecolog", "oftalmolog",
+    # Legal
+    "abogad", "bufete", "jurídic", "juridic", "legal", "derecho", "notarí", "notari",
+    "fiscal", "litigio", "estudio jurídico",
+    # Financiero
+    "banco", "bancario", "financier", "crédito", "credito", "inversión", "inversion",
+    "seguro", "préstamo", "prestamo", "hipotec", "bursátil", "bursatil", "cotizacion", "cripto",
+)
+
+
+def _rubro_sensible(resultado):
+    """True si el sitio parece de rubro sensible (salud/legal/financiero): sin branding (D1).
+
+    Erra hacia el lado seguro: un falso positivo solo omite el CTA/trust bar.
+    """
+    meta = resultado.get("meta", {}) or {}
+    texto = " ".join([
+        str(resultado.get("url", "")),
+        str(meta.get("title", "")),
+        str(meta.get("description", "")),
+        str(meta.get("og_site_name", "")),
+    ]).lower()
+    return any(kw in texto for kw in _RUBROS_SENSIBLES_KEYWORDS)
+
+
 def _generar_plugin_wordpress(resultado, safe_domain):
     """Genera un plugin WordPress con todas las correcciones."""
     site_name = _php_safe(resultado["meta"].get("og_site_name") or resultado["meta"].get("title") or safe_domain)
@@ -1009,6 +1040,8 @@ def _generar_plugin_wordpress(resultado, safe_domain):
 
     # No duplicar mecanismos de conversión si el sitio ya captura email (B12)
     con_email = resultado.get("forms", {}).get("con_email", 0)
+    # Sin branding de marca en rubros sensibles (D1: salud/legal/financiero)
+    rubro_sensible = _rubro_sensible(resultado)
     newsletter_footer = (
         f"add_action('wp_footer', function() {{ echo do_shortcode('[newsletter]'); }});"
         if not con_email else ""
@@ -1025,7 +1058,7 @@ function {safe_domain}_trust_bar() {{
 add_action('wp_footer', '{safe_domain}_cta_flotante');
 add_action('wp_footer', '{safe_domain}_trust_bar');
 """
-        if not con_email else ""
+        if (not con_email and not rubro_sensible) else ""
     )
 
     return f"""<?php
@@ -1073,7 +1106,7 @@ add_filter('widget_custom_html_content', 'do_shortcode');
 // NEWSLETTER SHORTCODE [newsletter]
 function {safe_domain}_newsletter_shortcode() {{
     // Procesar envío del formulario (anti-spam: nonce + sanitización)
-    if (isset($_POST['email'], $_POST['{safe_domain}_newsletter_nonce']) && wp_verify_nonce($_POST['{safe_domain}_newsletter_nonce'], '{safe_domain}_newsletter')) {{
+    if (isset($_POST['email'], $_POST['{safe_domain}_consent'], $_POST['{safe_domain}_newsletter_nonce']) && wp_verify_nonce($_POST['{safe_domain}_newsletter_nonce'], '{safe_domain}_newsletter')) {{
         $sub_email = sanitize_email($_POST['email']);
         if (is_email($sub_email)) {{
             $subs = get_option('{safe_domain}_subscribers', array());
@@ -1096,6 +1129,11 @@ function {safe_domain}_newsletter_shortcode() {{
         <label for="newsletter_email" style="font-size:12px;color:#aaa;margin-bottom:-6px">Tu email</label>
         <input type="email" name="email" id="newsletter_email" placeholder="tu@email.com" required
                style="padding:12px;border:1px solid #333;border-radius:6px;font-size:14px;background:#111;color:#fff">
+        <label style="display:flex;gap:8px;align-items:flex-start;font-size:11px;color:#aaa;line-height:1.4;margin-top:-4px">
+          <input type="checkbox" name="{safe_domain}_consent" value="1" required
+                 style="margin-top:2px;accent-color:#75aadb">
+          Acepto la <a href="/privacidad" target="_blank" rel="noopener" style="color:#75aadb;text-decoration:underline">política de privacidad</a> (Ley 25.326 / GDPR)
+        </label>
         <button type="submit"
                 style="padding:12px;background:#75aadb;color:#000;border:none;border-radius:6px;font-weight:bold;font-size:14px;cursor:pointer">
           Suscribirme

@@ -251,3 +251,59 @@ def test_p10_php_generado_es_sintacticamente_valido():
     assert _php_braces_balanced(code), "llaves desbalanceadas (PHP inválido)"
     for pat in _preg_patterns(code):
         re.compile(pat)  # patrón de regex inválido => error aquí
+
+
+# ---------------------------------------------------------------------------
+# D19 — el plugin WordPress solo se ofrece si el sitio ES WordPress
+# ---------------------------------------------------------------------------
+def test_d19_plugin_wordpress_solo_si_hay_wordpress():
+    from analyzer import _generar_soluciones
+    base = {
+        "url": "https://mi-sitio.com.ar",
+        "scorecard": {"SEO": (5, [])},
+        "forms": {"con_email": 0, "total": 0, "lista": []},
+        "meta": {"title": "Mi Sitio", "og_site_name": "Mi Sitio", "description": "Descripción de ejemplo del sitio"},
+    }
+    meta = {"title": "Mi Sitio", "description": "Descripción de ejemplo del sitio"}
+    sol = _generar_soluciones(base, "<html></html>", meta, tech=[])
+    nombres = [s["nombre"] for s in sol]
+    assert not any(n.endswith("optimizer.zip") for n in nombres), (
+        "se genera el plugin WordPress para un sitio que NO es WordPress (D19): "
+        "el cliente Wix/Squarespace recibe un ZIP inútil"
+    )
+    sol_wp = _generar_soluciones(base, "<html></html>", meta, tech=["WordPress"])
+    assert any(n.endswith("optimizer.zip") for n in [s["nombre"] for s in sol_wp]), (
+        "con WordPress detectado el plugin debería ofrecerse"
+    )
+
+
+# ---------------------------------------------------------------------------
+# D1 — sin CTA/trust bar de marca en sitios de rubro sensible (salud/legal/financiero)
+# ---------------------------------------------------------------------------
+def test_d1_sitio_sensible_sin_cta_de_marca():
+    code = _gen(meta={
+        "title": "Clínica Dental Dr. López",
+        "og_site_name": "Clínica Dental",
+        "description": "Atención odontológica y salud dental en el centro",
+    })
+    assert f"{SAFE_DOMAIN}_cta_flotante" not in code, (
+        "se inyecta el CTA flotante de marca sobre un sitio de salud (D1): "
+        "riesgo reputacional/legal"
+    )
+    assert f"{SAFE_DOMAIN}_trust_bar" not in code, (
+        "se inyecta la trust bar de marca sobre un sitio de salud (D1)"
+    )
+    # Control: un sitio neutral sí lleva CTA (el gating no debe quitarlo de todos)
+    assert f"{SAFE_DOMAIN}_cta_flotante" in _gen(), (
+        "el gating por rubro apagó el CTA también en sitios neutrales"
+    )
+
+
+# ---------------------------------------------------------------------------
+# D21 — el newsletter debe pedir consentimiento + política (Ley 25.326/GDPR)
+# ---------------------------------------------------------------------------
+def test_d21_newsletter_pide_consentimiento():
+    code = _gen()
+    assert 'type="checkbox"' in code, "el form no tiene checkbox de consentimiento (D21)"
+    assert "_consent" in code, "el handler no verifica el consentimiento (D21)"
+    assert "privacidad" in code.lower(), "el form no referencia la política de privacidad (D21)"
