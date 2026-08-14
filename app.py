@@ -614,7 +614,7 @@ def api_lead():
 
     # Enviar reporte por email
     if report_hash:
-        report_url = f"https://webanalyzer.com.ar/report/{report_hash}"
+        report_url = f"https://webanalyzer.com.ar/r/{report_hash}"  # ruta real del reporte
     else:
         report_url = url
     subject = "Tu analisis web esta listo"

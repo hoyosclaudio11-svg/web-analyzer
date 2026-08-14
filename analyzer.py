@@ -1500,8 +1500,61 @@ def _analizar_multipagina(url: str, depth: int = 3, user_id: int | None = None) 
     return resultado
 
 
+_ANALISIS_TTL_DIAS = 30
+_ANALISIS_MAX_POR_DOMINIO = 20
+_KEYS_SENSIBLES = {"value", "valores", "password", "secret", "token", "api_key", "apikey"}
+
+
+def _purga_analisis():
+    """Purga analisis/: archivos viejos (TTL) y exceso por dominio (E9/D10)."""
+    if not _os.path.exists(_ANALISIS_DIR):
+        return
+    ahora = datetime.now().timestamp()
+    por_dominio = {}
+    for nombre in _os.listdir(_ANALISIS_DIR):
+        if not nombre.endswith(".json"):
+            continue
+        path = _os.path.join(_ANALISIS_DIR, nombre)
+        try:
+            mtime = _os.path.getmtime(path)
+        except OSError:
+            continue
+        if ahora - mtime > _ANALISIS_TTL_DIAS * 86400:
+            try:
+                _os.remove(path)
+            except OSError:
+                pass
+            continue
+        # El nombre es {dominio}_{YYYYMMDD}_{HHMMSS}.json
+        dominio = nombre.rsplit("_", 2)[0] if nombre.count("_") >= 2 else nombre
+        por_dominio.setdefault(dominio, []).append((mtime, path))
+    for dominio, archivos in por_dominio.items():
+        if len(archivos) > _ANALISIS_MAX_POR_DOMINIO:
+            archivos.sort()  # más viejos primero
+            for _, path in archivos[:-_ANALISIS_MAX_POR_DOMINIO]:
+                try:
+                    _os.remove(path)
+                except OSError:
+                    pass
+
+
+def _sin_valores_sensibles(node):
+    """Elimina recursivamente valores de inputs/credenciales antes de persistir (D10)."""
+    if isinstance(node, dict):
+        return {
+            k: _sin_valores_sensibles(v)
+            for k, v in node.items()
+            if k.lower() not in _KEYS_SENSIBLES
+        }
+    if isinstance(node, list):
+        return [_sin_valores_sensibles(x) for x in node]
+    return node
+
+
 def _guardar_analisis(resultado, user_id=None):
     """Guarda el análisis en disco para historial (sin html_raw, escritura atómica)."""
+    _purga_analisis()  # E9/D10: TTL + tope por dominio antes de escribir
+
     dominio = urlparse(resultado["url"]).netloc.replace("www.", "")
     safe = re.sub(r"[^a-zA-Z0-9_-]", "_", dominio)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1510,6 +1563,7 @@ def _guardar_analisis(resultado, user_id=None):
     to_save = {k: v for k, v in resultado.items() if k != "html_raw"}
     if user_id is not None:
         to_save["user_id"] = user_id
+    to_save = _sin_valores_sensibles(to_save)  # D10: nunca persistir valores de inputs
     path = _os.path.join(_ANALISIS_DIR, filename)
 
     # Escritura atómica: temp + rename evita archivos corruptos por crash concurrente
