@@ -33,7 +33,7 @@ from analyzer import analizar, listar_analisis, _analizar_multipagina
 from database import (
     init_db, create_user, authenticate, get_user_by_token,
     get_user_stats, increment_analyses, increment_downloads,
-    create_shared_report, get_shared_report, track_event,
+    create_shared_report, get_shared_report, revocar_token, track_event,
     add_monitored_url, get_monitored_urls, update_monitored_score, delete_monitored_url,
     has_submitted_feedback, set_receive_updates,
 )
@@ -130,6 +130,13 @@ logging.basicConfig(
 )
 log = logging.getLogger("web-analyzer")
 
+
+def _sanear_log(texto: str) -> str:
+    """Evita log injection/forging: CRLF en entradas (URLs, paths) no crea
+    líneas falsas en el archivo de log (E31)."""
+    return str(texto).replace("\r", "\\r").replace("\n", "\\n")
+
+
 OUTPUT_DIR = BASE_DIR / "output"
 ANALISIS_DIR = BASE_DIR / "analisis"
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -222,7 +229,7 @@ def log_request(response):
     duration_ms = int((time.time() - g.get("start_time", time.time())) * 1000)
     log.info(
         f"trace={g.get('trace_id', '-')} "
-        f"method={request.method} path={request.path} "
+        f"method={request.method} path={_sanear_log(request.path)} "
         f"status={response.status_code} duration_ms={duration_ms}"
     )
     return response
@@ -309,6 +316,20 @@ def api_login():
     })
 
 
+@app.route("/api/auth/logout", methods=["POST"])
+def api_logout():
+    """Revoca el token de sesión: un token robado deja de valer (E14)."""
+    user_token = request.headers.get("X-User-Token", "")
+    if not user_token:
+        return jsonify({"error": "Token requerido", "code": "AUTH_REQUIRED"}), 401
+    try:
+        revocar_token(user_token)
+    except Exception:
+        log.exception("Error revocando token")
+        return _error_interno()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/auth/me")
 def api_me():
     if not g.current_user:
@@ -391,14 +412,14 @@ def api_analyze():
     depth = max(1, min(int(data.get("depth", 1)), 5))  # clamp anti-DoS: crawl máx 5 páginas
     user = getattr(g, "current_user", None)
     user_id = user["id"] if user else None
-    log.info(f"trace={g.trace_id} url={url} depth={depth} Analizando")
+    log.info(f"trace={g.trace_id} url={_sanear_log(url)} depth={depth} Analizando")
     try:
         if depth > 1:
             resultado = _analizar_multipagina(url, depth, user_id=user_id)
         else:
             resultado = analizar(url, user_id=user_id)
     except Exception as e:
-        log.exception(f"trace={g.trace_id} url={url} Error en análisis")
+        log.exception(f"trace={g.trace_id} url={_sanear_log(url)} Error en análisis")
         return _error_interno()
 
     scores = resultado.get("scorecard", {})
@@ -421,7 +442,7 @@ def api_analyze():
             update_monitored_score(url, user_id, promedio)
         track_event("analysis_completed", user_id, url, json.dumps({"promedio": promedio}))
     except Exception as db_err:
-        log.exception(f"trace={g.trace_id} url={url} Error guardando en DB (análisis igual se entrega)")
+        log.exception(f"trace={g.trace_id} url={_sanear_log(url)} Error guardando en DB (análisis igual se entrega)")
 
     # Todas las soluciones libres (sin pasarela de pago)
     soluciones = resultado.get("soluciones", [])
@@ -608,15 +629,20 @@ def api_lead():
     try:
         track_event("lead_captured", None, url,
             json.dumps({"email": email, "promedio": promedio, "report_hash": report_hash}))
-        log.info(f"trace={g.trace_id} lead={email} url={url} score={promedio}")
+        log.info(f"trace={g.trace_id} lead={_sanear_log(email)} url={_sanear_log(url)} score={promedio}")
     except Exception as e:
         log.exception("Error guardando lead")
 
     # Enviar reporte por email
-    if report_hash:
-        report_url = f"https://webanalyzer.com.ar/r/{report_hash}"  # ruta real del reporte
-    else:
-        report_url = url
+    if not report_hash:
+        # D6: el link del reporte nunca debe apuntar al sitio del cliente;
+        # generamos el report_hash server-side y persistimos el reporte
+        report_hash = secrets.token_hex(6)
+        try:
+            create_shared_report(report_hash, url, {}, float(promedio or 0))
+        except Exception:
+            log.exception("Error creando shared report para lead")
+    report_url = f"https://webanalyzer.com.ar/r/{report_hash}"  # ruta real del reporte
     subject = "Tu analisis web esta listo"
     body = f"""Hola,
 

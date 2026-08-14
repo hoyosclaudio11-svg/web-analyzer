@@ -139,3 +139,103 @@ def test_d10_json_guardado_excluye_valores_de_inputs(monkeypatch, tmp_path):
     assert "cliente@x.com" not in serializado, (
         "el JSON del análisis persiste el email del input (D10)"
     )
+
+
+# ---------------------------------------------------------------------------
+# D6 — el email de lead sin report_hash NO debe apuntar al sitio del cliente
+# ---------------------------------------------------------------------------
+def test_d6_email_lead_siempre_con_report_hash(client):
+    mod = client.app_module
+    mod._LEAD_SENDS.clear()  # AP2 deja la cuota del rate limit agotada
+    body = {}
+
+    def fake_send(to, subject, texto):
+        body["texto"] = texto
+        return True
+
+    with patch.object(mod, "send_email", side_effect=fake_send), \
+         patch.object(mod, "track_event"), \
+         patch.object(mod, "create_shared_report", return_value="abc123") as csr:
+        resp = client.post("/api/lead", json={"email": "u@x.com", "url": "https://cliente.com"})
+    assert resp.status_code == 200
+    assert "https://webanalyzer.com.ar/r/" in body["texto"], (
+        "sin report_hash el email apunta al sitio del cliente en vez del "
+        "reporte real (D6)"
+    )
+    assert csr.called, "no se generó un report_hash server-side (D6)"
+
+
+# ---------------------------------------------------------------------------
+# E13 — el token de sesión nunca debe aparecer en los logs
+# ---------------------------------------------------------------------------
+def test_e13_token_no_aparece_en_logs(client, caplog):
+    token = "tok_secreto_abc123"
+    with caplog.at_level("INFO", logger="web-analyzer"):
+        client.get("/api/history", headers={"X-User-Token": token})
+        client.get(f"/api/history?user_token={token}")
+    assert token not in caplog.text, (
+        "el X-User-Token se filtra a los logs de acceso (E13)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# E31 — log injection: CRLF en URL/path no debe crear líneas falsas
+# ---------------------------------------------------------------------------
+def test_e31_sanear_log_escapa_crlf():
+    import app as app_module
+    texto = "url=https://x.com/\nFAKE\n2026-01-01"
+    saneado = app_module._sanear_log(texto)
+    assert "\n" not in saneado, "CRLF sin escapar en el log (E31)"
+    assert "\\nFAKE" in saneado
+
+
+def test_e31_crlf_en_path_no_inyecta_lineas(client, caplog):
+    with caplog.at_level("INFO", logger="web-analyzer"):
+        client.get("/api/health%0D%0AEVIL=1")
+    assert "\nEVIL" not in caplog.text, (
+        "CRLF en el path del request inyecta líneas falsas al log (E31)"
+    )
+    assert "\\nEVIL" in caplog.text
+
+
+def test_e31_crlf_en_url_no_inyecta_lineas(client, caplog):
+    with patch.object(analyzer, "_safe_get", side_effect=ValueError("boom")), \
+         caplog.at_level("INFO", logger="web-analyzer"):
+        client.post("/api/analyze", json={"url": "https://x.com/\nFAKE"})
+    assert "\nFAKE" not in caplog.text, (
+        "CRLF en la URL del análisis inyecta líneas falsas al log (E31)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# E14 — logout debe revocar el token (un token robado no vale para siempre)
+# ---------------------------------------------------------------------------
+def test_e14_logout_revoca_el_token(client, tmp_path):
+    import database as db_mod
+    orig_path = db_mod.DB_PATH
+    orig_local = getattr(db_mod._local, "db", None)
+    db_mod.DB_PATH = tmp_path / "test.db"
+    if hasattr(db_mod._local, "db"):
+        del db_mod._local.db  # _conn usa hasattr, no truthiness
+    try:
+        db_mod.init_db()
+        # Registro + login reales contra la DB temporal
+        resp = client.post("/api/auth/register", json={"email": "u@x.com", "password": "pass1234"})
+        assert resp.status_code == 201
+        resp = client.post("/api/auth/login", json={"email": "u@x.com", "password": "pass1234"})
+        token = resp.get_json()["token"]
+        assert db_mod.get_user_by_token(token) is not None
+
+        # Logout: el token deja de valer
+        resp = client.post("/api/auth/logout", headers={"X-User-Token": token})
+        assert resp.status_code == 200
+        assert db_mod.get_user_by_token(token) is None, (
+            "el token sigue válido después del logout (E14)"
+        )
+    finally:
+        db_mod.DB_PATH = orig_path
+        if orig_local is None:
+            if hasattr(db_mod._local, "db"):
+                del db_mod._local.db
+        else:
+            db_mod._local.db = orig_local

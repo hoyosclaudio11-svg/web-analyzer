@@ -677,6 +677,74 @@ def _evaluar_rendimiento(imagenes, scripts, size_kb, psi_data=None):
     return score_heuristico, detalles
 
 
+def _hex_a_rgb(color):
+    """Convierte #rgb/#rrggbb/rgb() a tupla (r,g,b); None si no puede."""
+    color = (color or "").strip().lower()
+    if color.startswith("#"):
+        c = color[1:]
+        if len(c) == 3:
+            c = "".join(x * 2 for x in c)
+        if len(c) == 6:
+            try:
+                return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
+            except ValueError:
+                return None
+        return None
+    if color.startswith("rgb"):
+        nums = re.findall(r"\d+(?:\.\d+)?", color)
+        if len(nums) >= 3:
+            return tuple(min(255, int(float(n))) for n in nums[:3])
+    return None
+
+
+def _luminancia_relativa(rgb):
+    def canal(v):
+        c = v / 255.0
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (canal(x) for x in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _ratio_contraste(fg, bg):
+    """Ratio de contraste WCAG (1:1 a 21:1)."""
+    l1, l2 = _luminancia_relativa(fg), _luminancia_relativa(bg)
+    if l1 < l2:
+        l1, l2 = l2, l1
+    return (l1 + 0.05) / (l2 + 0.05)
+
+
+def _medir_contraste(soup):
+    """Detecta texto con contraste bajo (WCAG AA: >= 4.5:1) en estilos inline.
+
+    C13: el análisis no medía contraste — un sitio con texto gris sobre
+    blanco (2.8:1) sacaba 9/10 en Accesibilidad (falso negativo crítico).
+    """
+    body = soup.find("body")
+    bg_defecto = "#ffffff"
+    if body:
+        m = re.search(r"background(?:-color)?\s*:\s*([^;]+)", body.get("style", ""))
+        if m:
+            bg_defecto = m.group(1).strip()
+    bg_default_rgb = _hex_a_rgb(bg_defecto)
+    malos = []
+    for el in soup.find_all(style=True):
+        estilo = el.get("style", "")
+        m_color = re.search(r"color\s*:\s*([^;]+)", estilo)
+        if not m_color:
+            continue
+        fg = _hex_a_rgb(m_color.group(1))
+        if not fg:
+            continue
+        m_bg = re.search(r"background(?:-color)?\s*:\s*([^;]+)", estilo)
+        bg_rgb = _hex_a_rgb(m_bg.group(1)) if m_bg else bg_default_rgb
+        if not bg_rgb:
+            continue
+        ratio = _ratio_contraste(fg, bg_rgb)
+        if ratio < 4.5:
+            malos.append(ratio)
+    return malos
+
+
 def _evaluar_accesibilidad(imagenes, headings, forms, soup):
     score = 10
     detalles = []
@@ -714,6 +782,15 @@ def _evaluar_accesibilidad(imagenes, headings, forms, soup):
     if not skip_link and soup.find("body"):
         score -= 0  # No penalizar, solo notar
         # detalles.append("Sin skip-link para navegación por teclado")
+
+    # Contraste de colores (C13) — WCAG AA: texto normal >= 4.5:1
+    contrastes_malos = _medir_contraste(soup)
+    if contrastes_malos:
+        score -= 2
+        peor = min(contrastes_malos)
+        detalles.append(
+            f"Contraste de color bajo: {peor:.1f}:1 (WCAG AA exige >= 4.5:1)"
+        )
 
     return max(0, min(10, score)), detalles
 

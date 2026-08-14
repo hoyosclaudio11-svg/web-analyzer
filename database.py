@@ -389,6 +389,20 @@ def get_user_by_token(token: str) -> dict | None:
         return None
 
 
+def revocar_token(token: str) -> None:
+    """Invalida el token de sesión (logout): un token robado deja de valer (E14)."""
+    try:
+        c = _conn()
+        c.execute(
+            f"UPDATE users SET token = NULL, token_expires = NULL WHERE token = {_q()}",
+            (token,),
+        )
+        c.commit()
+    except Exception:
+        import logging
+        logging.getLogger("web-analyzer").exception("Error en revocar_token")
+
+
 def get_user_stats(user_id: int) -> dict:
     c = _conn()
     row = c.execute(

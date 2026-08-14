@@ -223,3 +223,39 @@ def test_a15_headings_ignoran_svg_template_script():
     assert data["h1"]["texts"] == ["Titulo real"], (
         "el H1 real debe ser el único contado"
     )
+
+
+# ---------------------------------------------------------------------------
+# C13 — contraste de color bajo NO medido (falso 9/10 en Accesibilidad)
+# ---------------------------------------------------------------------------
+def test_c13_contraste_bajo_se_penaliza():
+    soup = BeautifulSoup(
+        '<body style="background:#ffffff"><p style="color:#999999">'
+        'Texto gris de bajo contraste</p></body>',
+        "html.parser",
+    )
+    score, detalles = _evaluar_accesibilidad(
+        {"sin_alt": 0},
+        {"h1": {"count": 1}, "jerarquia_ok": True},
+        {"total": 0, "con_email": 0, "lista": []},
+        soup,
+    )
+    assert score < 10, "contraste 2.8:1 no detectado — falso 9/10 en Accesibilidad (C13)"
+    assert any("contraste" in d.lower() for d in detalles), (
+        "el reporte no menciona el problema de contraste"
+    )
+
+
+def test_c13_contraste_alto_no_se_penaliza():
+    soup = BeautifulSoup(
+        '<body style="background:#ffffff"><p style="color:#000000">'
+        'Texto negro sobre blanco</p></body>',
+        "html.parser",
+    )
+    score, _ = _evaluar_accesibilidad(
+        {"sin_alt": 0},
+        {"h1": {"count": 1}, "jerarquia_ok": True},
+        {"total": 0, "con_email": 0, "lista": []},
+        soup,
+    )
+    assert score == 10, "contraste correcto penalizado (falso positivo)"
