@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 from analyzer import (
     _evaluar_accesibilidad,
     _extraer_forms,
+    _extraer_headings,
     _extraer_imagenes,
     _extraer_metadatos,
     _fetch_pagespeed_insights,
@@ -158,3 +159,67 @@ def test_a9_psi_encoda_la_url_del_sitio():
         "sitio (p. ej. key=) contaminan la llamada"
     )
     assert qs.get("key") != ["HACK"], "el key del sitio analizado filtrado a Google"
+
+
+# ---------------------------------------------------------------------------
+# A3-WAF — sitio detrás de Cloudflare/DataDome/Imperva: el challenge no se audita
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("texto", [
+    "<html><head><title>Just a moment...</title></head><body>Checking your browser before accessing...</body></html>",
+    "<html><body>Verificando que sos humano... <script src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'></script></body></html>",
+    "<html><body>Access Denied. Incapsula incident ID: 1234567890</body></html>",
+])
+def test_a3_waf_challenge_no_se_audita(texto):
+    """El HTML de un challenge WAF no es el sitio real: error claro, no scorecard."""
+    with patch("analyzer.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("1.2.3.4", 80))]), \
+         patch("analyzer.requests.Session") as Sess:
+        sess = Sess.return_value
+        resp = Mock()
+        resp.is_redirect = False
+        resp.status_code = 403
+        resp.headers = {}
+        resp.text = texto
+        sess.get.return_value = resp
+        with pytest.raises(ValueError) as exc:
+            _safe_get("http://example.com/")
+        assert "WAF" in str(exc.value), (
+            "el challenge se devuelve como error genérico o se audita el HTML del WAF"
+        )
+
+
+def test_a3_waf_analizar_devuelve_error_claro():
+    """El análisis propaga el aviso de WAF a los errores del resultado."""
+    with patch(
+        "analyzer._safe_get",
+        side_effect=ValueError(
+            "El sitio está protegido por un WAF/anti-bot (Cloudflare) — no se pudo auditar"
+        ),
+    ):
+        resultado = analizar("http://example.com/")
+    assert any("WAF" in e for e in resultado["errores"]), (
+        "el usuario recibe un scorecard basura en vez del aviso de WAF"
+    )
+
+
+# ---------------------------------------------------------------------------
+# A15 — <h1> dentro de svg/template/script no debe contar (falso conteo)
+# ---------------------------------------------------------------------------
+def test_a15_headings_ignoran_svg_template_script():
+    html = """
+    <html><body>
+      <h1>Titulo real</h1>
+      <script>var x = '<h1>falso en JS</h1>';</script>
+      <template><h1>plantilla</h1></template>
+      <svg viewBox="0 0 10 10"><text><h1>svg-h1</h1></text></svg>
+      <noscript><h1>sin js</h1></noscript>
+      <h2>Subtitulo</h2>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    data = _extraer_headings(soup)
+    assert data["h1"]["count"] == 1, (
+        f"falso conteo de H1 (svg/template/script): {data['h1']}"
+    )
+    assert data["h1"]["texts"] == ["Titulo real"], (
+        "el H1 real debe ser el único contado"
+    )

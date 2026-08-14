@@ -307,3 +307,30 @@ def test_d21_newsletter_pide_consentimiento():
     assert 'type="checkbox"' in code, "el form no tiene checkbox de consentimiento (D21)"
     assert "_consent" in code, "el handler no verifica el consentimiento (D21)"
     assert "privacidad" in code.lower(), "el form no referencia la política de privacidad (D21)"
+
+
+# ---------------------------------------------------------------------------
+# A6 — sitio multiidioma (WPML/Polylang): no borrar metas description por idioma
+# ---------------------------------------------------------------------------
+def test_a6_no_borra_metas_description_por_idioma():
+    code = _gen()
+    assert "removeChild($meta)" not in code, (
+        "el plugin borra TODAS las meta description (WPML/Polylang tienen "
+        "una por idioma) y deja una sola genérica (A6)"
+    )
+    assert "count($descripciones) === 0" in code, (
+        "la meta description propia debe inyectarse solo si el sitio no tiene ninguna"
+    )
+
+
+# ---------------------------------------------------------------------------
+# B25 — defer no debe romper widgets de chat/CRM con document.write
+# ---------------------------------------------------------------------------
+def test_b25_defer_excluye_widgets_de_terceros():
+    code = _gen()
+    assert "jquery" in code, "el defer debe seguir excluyendo jQuery"
+    for widget in ("tawk", "crisp", "hubspot", "intercom", "zendesk"):
+        assert widget in code, (
+            f"el defer no excluye el widget de terceros {widget} — "
+            "document.write + defer rompe el widget (B25)"
+        )

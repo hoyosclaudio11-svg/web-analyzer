@@ -113,6 +113,34 @@ def _url_con_ip(url, ip_str):
 _MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # 10 MB — anti gzip-bomb / páginas gigantes
 
 
+def _detectar_waf(resp):
+    """Detecta un challenge WAF/anti-bot (Cloudflare, DataDome, Imperva/Incapsula).
+
+    El HTML de un challenge NO es el sitio real: auditarlo devolvería un
+    scorecard basura. Devuelve el nombre del WAF o None.
+    """
+    if resp.status_code not in (403, 429, 503):
+        return None
+    head = (resp.text or "")[:20000].lower()
+    server = (resp.headers.get("Server", "") or "").lower()
+    if (
+        "cloudflare" in server
+        or "just a moment" in head
+        or "checking your browser" in head
+        or "cf-challenge" in head
+        or "challenge-platform" in head
+        or "cf-mitigated" in head
+    ):
+        return "Cloudflare"
+    if "datadome" in head or "datadome" in server:
+        return "DataDome"
+    if any(m in head or m in server for m in ("imperva", "incapsula", "incap_ses")):
+        return "Imperva/Incapsula"
+    if any(m in head for m in ("verificando que sos humano", "verifying you are human")):
+        return "anti-bot"
+    return None
+
+
 def _safe_get(url, timeout=15):
     """Fetch URL con headers de navegador, protección SSRF y pinning de IP."""
     import random
@@ -144,6 +172,13 @@ def _safe_get(url, timeout=15):
                 hops += 1
                 continue
             break
+        # WAF/anti-bot (Cloudflare/DataDome/Imperva): el HTML del challenge no
+        # es el sitio real — abortar con mensaje claro, no auditar basura (A3)
+        waf = _detectar_waf(resp)
+        if waf:
+            raise ValueError(
+                f"El sitio está protegido por un WAF/anti-bot ({waf}) — no se pudo auditar"
+            )
         resp.raise_for_status()
         # Límite de tamaño (Content-Length) — rechaza antes de descargar
         try:
@@ -411,10 +446,20 @@ def _formato_imagen(src):
     return "otro"
 
 
+_CONTEXTO_HEADINGS_NO_INDEXABLE = ("script", "style", "template", "noscript", "svg")
+
+
 def _extraer_headings(soup):
+    def _en_contexto_oculto(tag):
+        # H1 dentro de svg/template/script no es contenido visible real (A15)
+        for parent in tag.parents:
+            if parent.name in _CONTEXTO_HEADINGS_NO_INDEXABLE:
+                return True
+        return False
+
     result = {}
     for h in HEADINGS:
-        tags = soup.find_all(h)
+        tags = [t for t in soup.find_all(h) if not _en_contexto_oculto(t)]
         result[h] = {"count": len(tags), "texts": [t.get_text(strip=True)[:100] for t in tags[:10]]}
     # Verificar jerarquía
     jerarquia = []
@@ -1252,21 +1297,25 @@ function {safe_domain}_optimize_output($html) {{
     libxml_clear_errors();
     libxml_use_internal_errors($prev);
 
-    // 5a. Quitar meta descriptions viejas (Yoast/RankMath/theme) — parseo DOM, no regex
+    // 5a. Meta description: NO borramos las existentes (A6 — WPML/Polylang
+    //     tienen una por idioma; Yoast/RankMath/theme las generan). Solo
+    //     inyectamos la nuestra si el sitio no tiene ninguna.
+    $descripciones = array();
     foreach ($doc->getElementsByTagName('meta') as $meta) {{
         $name = strtolower($meta->getAttribute('name'));
         $prop = strtolower($meta->getAttribute('property'));
         if ($name === 'description' || $name === 'twitter:description' || $prop === 'og:description') {{
-            $meta->parentNode->removeChild($meta);
+            $descripciones[] = $meta;
         }}
     }}
-    // Inyectar nuestra meta description al final de <head>
-    $heads = $doc->getElementsByTagName('head');
-    if ($heads->length) {{
-        $meta = $doc->createElement('meta');
-        $meta->setAttribute('name', 'description');
-        $meta->setAttribute('content', {safe_domain}_get_meta_desc());
-        $heads->item(0)->appendChild($meta);
+    if (count($descripciones) === 0) {{
+        $heads = $doc->getElementsByTagName('head');
+        if ($heads->length) {{
+            $meta = $doc->createElement('meta');
+            $meta->setAttribute('name', 'description');
+            $meta->setAttribute('content', {safe_domain}_get_meta_desc());
+            $heads->item(0)->appendChild($meta);
+        }}
     }}
 
     // 5b. Acortar title si es muy largo (>60 chars)
@@ -1318,6 +1367,17 @@ add_action('shutdown', function() {{ if (ob_get_level()) ob_end_flush(); }});
 function {safe_domain}_defer_scripts($tag, $handle, $src) {{
     if (is_admin() || !$src) return $tag;
     if (strpos($handle, 'jquery') === 0 || strpos($handle, 'jquery-ui') !== false) return $tag;
+    // B25 — widgets de chat/CRM que dependen del orden o usan document.write
+    // (Tawk.to, Crisp, HubSpot, Intercom, Zendesk, LiveChat, Tidio):
+    // excluirlos del defer o el widget desaparece/rompe el layout.
+    $excluidos = array('tawk', 'tawkto', 'crisp', 'hubspot', 'hs-scripts', 'intercom', 'zendesk', 'livechat', 'tidio');
+    foreach ($excluidos as $prefijo) {{
+        if (strpos($handle, $prefijo) !== false) return $tag;
+    }}
+    $dominios_excluidos = array('tawk.to', 'crisp.chat', 'hubspot', 'hsstatic.net', 'hsforms.net', 'intercomcdn.com', 'zendesk.com', 'livechatinc.com', 'tidiochat.com');
+    foreach ($dominios_excluidos as $dom) {{
+        if (strpos($src, $dom) !== false) return $tag;
+    }}
     return str_replace(' src=', ' defer src=', $tag);
 }}
 add_filter('script_loader_tag', '{safe_domain}_defer_scripts', 10, 3);
