@@ -13,7 +13,7 @@ _analyzer_mock = MagicMock()
 _analyzer_mock.listar_analisis.return_value = []
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="module", autouse=True)
 def _patch_analyzer_module():
     """Inyecta el mock de 'analyzer' sólo durante esta sesión de tests."""
     original = sys.modules.get("analyzer")

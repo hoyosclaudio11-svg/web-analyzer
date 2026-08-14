@@ -16,7 +16,7 @@ except ImportError:
 import re
 import json
 import uuid
-import hashlib
+import secrets
 import time
 import logging
 import traceback
@@ -160,8 +160,8 @@ def check_auth():
         if (auth.startswith("Bearer ") and auth[7:] == API_KEY) or (token_arg == API_KEY):
             return None
 
-    # Token de usuario
-    user_token = request.headers.get("X-User-Token", "") or request.args.get("user_token", "")
+    # Token de usuario: SOLO por header, nunca en query string (se filtra en logs/referrer)
+    user_token = request.headers.get("X-User-Token", "")
     if user_token:
         user = get_user_by_token(user_token)
         if user:
@@ -188,10 +188,15 @@ def assign_trace_id():
 def handle_500(e):
     """Devuelve JSON en vez de HTML para errores internos."""
     log.exception(f"trace={g.get('trace_id', '-')} 500 Internal Error")
+    return _error_interno()
+
+
+def _error_interno():
+    """500 genérico sin filtrar detalle interno; el detalle queda solo en logs (trace_id)."""
     return jsonify({
         "error": "Error interno del servidor. Reintentá en unos segundos.",
         "code": "INTERNAL_ERROR",
-        "trace_id": g.get('trace_id', ''),
+        "trace_id": g.get("trace_id", ""),
     }), 500
 
 
@@ -276,7 +281,7 @@ def api_register():
     except Exception as e:
         import traceback
         log.error(f"Error en registro: {traceback.format_exc()}")
-        return jsonify({"error": f"Error interno: {e}"}), 500
+        return _error_interno()
     if not user:
         return jsonify({"error": "El email ya está registrado"}), 409
     track_event("user_registered", user["id"])
@@ -293,7 +298,7 @@ def api_login():
         user = authenticate(email, password)
     except Exception as e:
         log.exception(f"trace={g.trace_id} Error en autenticación")
-        return jsonify({"error": f"Error al iniciar sesión: {e}"}), 500
+        return _error_interno()
     if not user:
         return jsonify({"error": "Credenciales inválidas"}), 401
     track_event("user_logged_in", user["id"])
@@ -361,7 +366,7 @@ def api_feedback():
         log.info(f"trace={g.trace_id} user={user_id} feedback rating={rating} hash={report_hash}")
     except Exception as e:
         log.exception("Error guardando feedback")
-        return jsonify({"error": str(e)}), 500
+        return _error_interno()
 
     return jsonify({"ok": True})
 
@@ -383,16 +388,18 @@ def api_analyze():
     if not url.startswith("http"):
         url = "https://" + url
 
-    depth = int(data.get("depth", 1))
+    depth = max(1, min(int(data.get("depth", 1)), 5))  # clamp anti-DoS: crawl máx 5 páginas
+    user = getattr(g, "current_user", None)
+    user_id = user["id"] if user else None
     log.info(f"trace={g.trace_id} url={url} depth={depth} Analizando")
     try:
         if depth > 1:
-            resultado = _analizar_multipagina(url, depth)
+            resultado = _analizar_multipagina(url, depth, user_id=user_id)
         else:
-            resultado = analizar(url)
+            resultado = analizar(url, user_id=user_id)
     except Exception as e:
         log.exception(f"trace={g.trace_id} url={url} Error en análisis")
-        return jsonify({"error": str(e)}), 500
+        return _error_interno()
 
     scores = resultado.get("scorecard", {})
     if scores:
@@ -400,8 +407,7 @@ def api_analyze():
     else:
         promedio = 0
 
-    report_hash = hashlib.sha256(url.encode()).hexdigest()[:12]
-    user_id = g.current_user["id"] if g.current_user else None
+    report_hash = secrets.token_hex(6)  # aleatorio e impredecible (12 hex)
 
     # DB operations son best-effort: si fallan, igual devolvemos el análisis
     try:
@@ -550,7 +556,36 @@ def api_monitor():
 @app.route("/api/history")
 @limiter.limit("30 per minute")
 def api_history():
-    return jsonify(listar_analisis())
+    """Historial del usuario autenticado; los invitados no ven nada."""
+    user = getattr(g, "current_user", None)
+    user_id = user["id"] if user else None
+    return jsonify([a for a in listar_analisis(user_id=user_id) if a.get("user_id") == user_id])
+
+
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+_LEAD_SENDS = {}  # ip -> timestamps de envíos (ventana deslizante de 60s)
+_LEAD_MAX_PER_MIN = 3
+
+
+def _email_valido(email):
+    """Valida formato del email y rechaza inyección de headers (CRLF/LF)."""
+    if not isinstance(email, str):
+        return False
+    if "\r" in email or "\n" in email:
+        return False
+    return bool(_EMAIL_RE.match(email))
+
+
+def _lead_excede_limite(ip):
+    """Cuenta envíos recientes de ip; True si excede el límite estricto."""
+    now = time.time()
+    recientes = [t for t in _LEAD_SENDS.get(ip, []) if now - t < 60]
+    if len(recientes) >= _LEAD_MAX_PER_MIN:
+        _LEAD_SENDS[ip] = recientes
+        return True
+    recientes.append(now)
+    _LEAD_SENDS[ip] = recientes
+    return False
 
 
 @app.route("/api/lead", methods=["POST"])
@@ -564,6 +599,10 @@ def api_lead():
 
     if not email or not url:
         return jsonify({"error": "Email y URL requeridos"}), 400
+    if not _email_valido(email):
+        return jsonify({"error": "Email inválido"}), 400
+    if _lead_excede_limite(get_remote_address()):
+        return jsonify({"error": "Demasiados envíos por minuto"}), 429
 
     # Guardar lead
     try:

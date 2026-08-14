@@ -11,7 +11,7 @@ import io
 import socket
 import ipaddress
 from datetime import datetime
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse, urlencode
 
 import requests
 from bs4 import BeautifulSoup
@@ -47,25 +47,30 @@ _USER_AGENTS = [
 ]
 
 
-def _is_public_url(url):
-    """Valida que la URL apunte a un servidor público (anti-SSRF)."""
+def _resolver_ip_publica(url):
+    """Resuelve y valida la IP de la URL; devuelve (ok, reason, ip_pinned|None).
+
+    El pinning (devolver la IP validada) cierra el TOCTOU del DNS rebinding:
+    la conexión se hace contra esta IP y nunca se vuelve a resolver el hostname.
+    """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        return False, "Solo se permiten URLs http/https"
+        return False, "Solo se permiten URLs http/https", None
 
     hostname = parsed.hostname
     if not hostname:
-        return False, "URL sin hostname válido"
+        return False, "URL sin hostname válido", None
 
     host_lower = hostname.lower()
     if host_lower in _PRIVATE_HOSTS or host_lower.startswith("127."):
-        return False, "Host interno no permitido"
+        return False, "Host interno no permitido", None
 
     try:
         ips = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
     except socket.gaierror:
-        return False, f"No se pudo resolver el dominio: {hostname}"
+        return False, f"No se pudo resolver el dominio: {hostname}", None
 
+    pinned = None
     for _, _, _, _, sockaddr in ips:
         ip_str = sockaddr[0]
         try:
@@ -73,19 +78,43 @@ def _is_public_url(url):
         except ValueError:
             continue
         if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_multicast:
-            return False, f"IP no pública detectada: {ip_str}"
+            return False, f"IP no pública detectada: {ip_str}", None
         if ip.version == 6 and ip.is_reserved:
-            return False, f"IPv6 reservada detectada: {ip_str}"
+            return False, f"IPv6 reservada detectada: {ip_str}", None
+        if pinned is None:
+            pinned = ip_str
 
-    return True, "ok"
+    if pinned is None:
+        return False, f"No se pudo resolver el dominio: {hostname}", None
+
+    return True, "ok", pinned
+
+
+def _is_public_url(url):
+    """Valida que la URL apunte a un servidor público (anti-SSRF)."""
+    ok, reason, _ = _resolver_ip_publica(url)
+    return ok, reason
+
+
+def _url_con_ip(url, ip_str):
+    """Reemplaza el hostname por la IP validada, preservando puerto/query (pinning)."""
+    parsed = urlparse(url)
+    host = f"[{ip_str}]" if ":" in ip_str else ip_str
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    if port:
+        host = f"{host}:{port}"
+    netloc = f"{parsed.username}@{host}" if parsed.username else host
+    return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+
+
+_MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # 10 MB — anti gzip-bomb / páginas gigantes
 
 
 def _safe_get(url, timeout=15):
-    """Fetch URL con headers de navegador y protección SSRF."""
-    ok, reason = _is_public_url(url)
-    if not ok:
-        raise ValueError(f"URL bloqueada: {reason}")
-
+    """Fetch URL con headers de navegador, protección SSRF y pinning de IP."""
     import random
     headers = {
         "User-Agent": random.choice(_USER_AGENTS),
@@ -95,21 +124,34 @@ def _safe_get(url, timeout=15):
     try:
         # Seguimos redirects manualmente para validar cada destino (anti-SSRF)
         session = requests.Session()
-        resp = session.get(url, headers=headers, timeout=timeout, allow_redirects=False)
+        current = url
         hops = 0
-        while resp.is_redirect and hops < 10:
-            next_url = resp.headers.get("Location", "")
-            if not next_url.startswith(("http://", "https://")):
-                # URL relativa — la resolvemos contra la actual
-                from urllib.parse import urljoin
-                next_url = urljoin(url, next_url)
-            ok, reason = _is_public_url(next_url)
+        while True:
+            ok, reason, ip_str = _resolver_ip_publica(current)
             if not ok:
-                raise ValueError(f"Redirect bloqueado (SSRF): {reason}")
-            url = next_url
-            resp = session.get(url, headers=headers, timeout=timeout, allow_redirects=False)
-            hops += 1
+                raise ValueError(f"URL bloqueada: {reason}")
+            # Pinning: conectar a la IP ya validada (no re-resolver — DNS rebinding)
+            pinned_url = _url_con_ip(current, ip_str)
+            hop_headers = dict(headers)
+            hop_headers["Host"] = urlparse(current).netloc
+            resp = session.get(pinned_url, headers=hop_headers, timeout=timeout, allow_redirects=False)
+            if resp.is_redirect and hops < 10:
+                next_url = resp.headers.get("Location", "")
+                if not next_url.startswith(("http://", "https://")):
+                    # URL relativa — la resolvemos contra la actual
+                    next_url = urljoin(current, next_url)
+                current = next_url
+                hops += 1
+                continue
+            break
         resp.raise_for_status()
+        # Límite de tamaño (Content-Length) — rechaza antes de descargar
+        try:
+            clen = int(resp.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            clen = 0
+        if clen > _MAX_RESPONSE_BYTES:
+            raise ValueError(f"Respuesta demasiado grande ({clen} bytes)")
         return resp
     except requests.Timeout:
         raise ValueError(f"Timeout al acceder a {url} — el servidor no respondió en {timeout}s")
@@ -130,7 +172,7 @@ def _score_color(score):
 # =============================================================================
 
 
-def analizar(url):
+def analizar(url, user_id=None):
     """
     Analiza una URL y retorna un dict completo con:
     - metadatos extraídos
@@ -163,6 +205,9 @@ def analizar(url):
         return resultado
 
     soup = BeautifulSoup(html, "html.parser")
+
+    # SPA renderizada en cliente: el HTML crudo no tiene contenido auditable
+    resultado["spa_detected"] = _detectar_spa(soup, html)
 
     # --- Extracción ---
     meta = _extraer_metadatos(soup, url, resp.url)
@@ -209,8 +254,8 @@ def analizar(url):
     # --- Soluciones (archivos) ---
     resultado["soluciones"] = _generar_soluciones(resultado, html, meta, tech)
 
-    # --- Guardar análisis ---
-    _guardar_analisis(resultado)
+    # --- Guardar análisis (dueño para historial filtrado) ---
+    _guardar_analisis(resultado, user_id)
 
     return resultado
 
@@ -289,7 +334,37 @@ def _extraer_metadatos(soup, url_original, url_final):
     if canon:
         meta["canonical"] = canon.get("href", "")
 
+    # Descripción en JSON-LD (sitios modernos sin <meta name=description>)
+    if not meta["description"]:
+        for script in soup.find_all("script", {"type": "application/ld+json"}):
+            try:
+                data = json.loads(script.string or "")
+            except (ValueError, TypeError):
+                continue
+            desc = _buscar_descripcion_jsonld(data)
+            if desc:
+                meta["description"] = desc
+                meta["description_length"] = len(desc)
+                break
+
     return meta
+
+
+def _buscar_descripcion_jsonld(node):
+    """Busca recursivamente un campo 'description' en un grafo JSON-LD."""
+    if isinstance(node, dict):
+        if isinstance(node.get("description"), str) and node["description"].strip():
+            return node["description"].strip()
+        for value in node.values():
+            found = _buscar_descripcion_jsonld(value)
+            if found:
+                return found
+    elif isinstance(node, list):
+        for value in node:
+            found = _buscar_descripcion_jsonld(value)
+            if found:
+                return found
+    return None
 
 
 def _extraer_imagenes(soup, base_url):
@@ -301,6 +376,7 @@ def _extraer_imagenes(soup, base_url):
         imgs.append({
             "src": src,
             "alt": img.get("alt", ""),
+            "tiene_alt": "alt" in img.attrs,
             "width": img.get("width", ""),
             "height": img.get("height", ""),
             "loading": img.get("loading", ""),
@@ -308,7 +384,8 @@ def _extraer_imagenes(soup, base_url):
         })
     return {
         "total": len(imgs),
-        "sin_alt": sum(1 for i in imgs if not i["alt"]),
+        # alt="" es decorativo y válido WCAG; solo cuenta la ausencia del atributo
+        "sin_alt": sum(1 for i in imgs if not i["tiene_alt"]),
         "sin_lazy": sum(1 for i in imgs if i["loading"] != "lazy"),
         "formatos": list(set(i["format"] for i in imgs if i["format"])),
         "lista": imgs[:20],
@@ -365,12 +442,16 @@ def _extraer_forms(soup):
     for form in soup.find_all("form"):
         inputs = form.find_all(["input", "textarea", "select"])
         labels = form.find_all("label")
+        # aria-label/aria-labelledby son labels accesibles válidos (WCAG)
+        aria_labels = sum(
+            1 for inp in inputs if inp.get("aria-label") or inp.get("aria-labelledby")
+        )
         submit = form.find_all(["button", "input"], type="submit")
         forms.append({
             "action": form.get("action", ""),
             "method": form.get("method", "GET").upper(),
             "inputs": len(inputs),
-            "labels": len(labels),
+            "labels": len(labels) + aria_labels,
             "has_submit": len(submit) > 0,
             "has_email": any(
                 inp.get("type") == "email" or "email" in (inp.get("name", "") + inp.get("id", "")).lower()
@@ -446,6 +527,24 @@ def _detectar_tecnologia(html, soup):
     return detectadas
 
 
+def _detectar_spa(soup, html):
+    """Detecta SPAs renderizadas en cliente: HTML crudo sin contenido real."""
+    if soup.body is None:
+        return False
+    body_text = soup.body.get_text(" ", strip=True)
+    root = soup.body.select_one(
+        "#root, #app, #__next, #__nuxt, #mount, #app-mount, #main, [data-reactroot], [data-v-app]"
+    )
+    if root is not None and len(body_text) < 50:
+        return True
+    html_low = html.lower()
+    if len(body_text) < 50 and any(
+        sig in html_low for sig in ("/_next/", "react.production", "vue.runtime", "/assets/index.")
+    ):
+        return True
+    return False
+
+
 # =============================================================================
 # Evaluadores (0-10)
 # =============================================================================
@@ -454,7 +553,7 @@ def _detectar_tecnologia(html, soup):
 def _fetch_pagespeed_insights(url: str) -> dict | None:
     """Consulta la API de PageSpeed Insights para métricas reales de Core Web Vitals."""
     api_key = os.environ.get("PAGESPEED_API_KEY", "")
-    api_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={url}"
+    api_url = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed?" + urlencode({"url": url})
     if api_key:
         api_url += f"&key={api_key}"
     try:
@@ -886,11 +985,48 @@ Agregar en el `<head>`:
     return soluciones
 
 
+_PHP_UNSAFE_CHARS = set("'\"\\*();<>${}[]")
+
+
+def _php_safe(value):
+    """Limpia un valor antes de interpolar en el PHP generado (anti inyección).
+
+    Remueve los caracteres que podrían romper el docblock (/* */), las strings
+    PHP o armar payloads de código: cierre del comentario (*/), apertura de
+    PHP (<?php), comillas simples/dobles y backslash, y símbolos de código
+    como paréntesis, punto y coma, dólar y llaves.
+    """
+    if not isinstance(value, str):
+        value = str(value)
+    return "".join(ch for ch in value if ch not in _PHP_UNSAFE_CHARS)
+
+
 def _generar_plugin_wordpress(resultado, safe_domain):
     """Genera un plugin WordPress con todas las correcciones."""
-    site_name = resultado["meta"].get("og_site_name") or resultado["meta"].get("title") or safe_domain
+    site_name = _php_safe(resultado["meta"].get("og_site_name") or resultado["meta"].get("title") or safe_domain)
     site_desc = resultado["meta"].get("description") or ""
-    site_url = resultado["url"]
+    site_url = _php_safe(resultado["url"])
+
+    # No duplicar mecanismos de conversión si el sitio ya captura email (B12)
+    con_email = resultado.get("forms", {}).get("con_email", 0)
+    newsletter_footer = (
+        f"add_action('wp_footer', function() {{ echo do_shortcode('[newsletter]'); }});"
+        if not con_email else ""
+    )
+    cta_block = (
+        f"""
+// 7. CTA FLOTANTE + CONFIANZA (mejora conversión)
+function {safe_domain}_cta_flotante() {{
+    echo '<a href="#newsletter" style="position:fixed;bottom:20px;right:20px;background:#e63946;color:#fff;padding:12px 20px;border-radius:50px;font-weight:bold;text-decoration:none;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.25);font-family:Arial,sans-serif;font-size:14px;transition:transform 0.2s">Suscribite gratis</a>';
+}}
+function {safe_domain}_trust_bar() {{
+    echo '<div style="text-align:center;padding:12px;background:#111;color:#aaa;font-size:11px;font-family:Arial,sans-serif;letter-spacing:0.3px">Contenido actualizado diariamente &nbsp;|&nbsp; Garantía de fuentes verificadas &nbsp;|&nbsp; Sin spam &nbsp;|&nbsp; <a href="#newsletter" style="color:#75aadb;text-decoration:none;font-weight:bold">Suscribite gratis →</a></div>';
+}}
+add_action('wp_footer', '{safe_domain}_cta_flotante');
+add_action('wp_footer', '{safe_domain}_trust_bar');
+"""
+        if not con_email else ""
+    )
 
     return f"""<?php
 /**
@@ -922,18 +1058,41 @@ if (version_compare(PHP_VERSION, '7.4', '<')) {{
     return;
 }}
 
+// Polyfill mbstring: evita white screen en hostings sin la extensión
+if (!function_exists('mb_substr')) {{
+    function mb_substr($str, $start, $length = null, $encoding = null) {{
+        return $length === null ? substr($str, $start) : substr($str, $start, $length);
+    }}
+    function mb_strlen($str, $encoding = null) {{ return strlen($str); }}
+}}
+
 // HABILITAR SHORTCODES EN WIDGETS
 add_filter('widget_text', 'do_shortcode');
 add_filter('widget_custom_html_content', 'do_shortcode');
 
 // NEWSLETTER SHORTCODE [newsletter]
 function {safe_domain}_newsletter_shortcode() {{
+    // Procesar envío del formulario (anti-spam: nonce + sanitización)
+    if (isset($_POST['email'], $_POST['{safe_domain}_newsletter_nonce']) && wp_verify_nonce($_POST['{safe_domain}_newsletter_nonce'], '{safe_domain}_newsletter')) {{
+        $sub_email = sanitize_email($_POST['email']);
+        if (is_email($sub_email)) {{
+            $subs = get_option('{safe_domain}_subscribers', array());
+            if (!in_array($sub_email, $subs)) {{
+                $subs[] = $sub_email;
+                update_option('{safe_domain}_subscribers', $subs);
+            }}
+            echo '<p style="margin:10px 0 0;font-size:13px;color:#7CFC98">✅ ¡Gracias! Te suscribiste correctamente.</p>';
+        }} else {{
+            echo '<p style="margin:10px 0 0;font-size:13px;color:#ff6b6b">Email inválido. Revisalo e intentá de nuevo.</p>';
+        }}
+    }}
     ob_start();
     ?>
     <div style="background:linear-gradient(135deg,#0a0f1e,#1a1f2e);padding:24px;border-radius:12px;border-left:4px solid #75aadb;font-family:Arial,sans-serif;margin:20px 0;color:#e0e0e0">
       <h3 style="margin:0 0 6px;font-size:17px;color:#fff">Recibí las noticias en tu mail</h3>
       <p style="margin:0 0 16px;font-size:13px;color:#aaa">Suscribite gratis y no te pierdas ninguna actualización.</p>
       <form method="post" action="" style="display:flex;flex-direction:column;gap:10px">
+        <?php wp_nonce_field('{safe_domain}_newsletter', '{safe_domain}_newsletter_nonce'); ?>
         <label for="newsletter_email" style="font-size:12px;color:#aaa;margin-bottom:-6px">Tu email</label>
         <input type="email" name="email" id="newsletter_email" placeholder="tu@email.com" required
                style="padding:12px;border:1px solid #333;border-radius:6px;font-size:14px;background:#111;color:#fff">
@@ -949,10 +1108,10 @@ function {safe_domain}_newsletter_shortcode() {{
     return ob_get_clean();
 }}
 add_shortcode('newsletter', '{safe_domain}_newsletter_shortcode');
-add_action('wp_footer', function() {{ echo do_shortcode('[newsletter]'); }});
+{newsletter_footer}
 
 // 1. META DESCRIPTION (vía output buffer para pisar cualquier hardcodeo del theme)
-function {safe_domain}_build_meta_desc() {{
+function {safe_domain}_get_meta_desc() {{
     if (is_single() || is_page()) {{
         global $post;
         if (has_excerpt($post->ID)) {{
@@ -970,7 +1129,12 @@ function {safe_domain}_build_meta_desc() {{
         $desc = $desc ? $desc . ' — ' . $site : $site;
         $desc = mb_substr($desc . '. Noticias, análisis y toda la información actualizada a diario. ¡Visitá el sitio!', 0, 155);
     }}
-    return '<meta name="description" content="' . esc_attr($desc) . '">';
+    return $desc;
+}}
+
+function {safe_domain}_build_meta_desc() {{
+    // Compat: tag completo (hook externo/theme)
+    return '<meta name="description" content="' . esc_attr({safe_domain}_get_meta_desc()) . '">';
 }}
 
 // 2. OPEN GRAPH + TWITTER CARDS
@@ -1027,16 +1191,8 @@ function {safe_domain}_canonical() {{
 }}
 add_action('wp_head', '{safe_domain}_canonical', 15);
 
-// 4. ALT TEXT AUTOMÁTICO
-function {safe_domain}_auto_alt($content) {{
-    if (is_single()) {{
-        $title = esc_attr(get_the_title());
-        $content = preg_replace('/<img(.*?)alt=["\\'\\s]*["\\'\\s](.*?)>/i', '<img$1alt="' . $title . '"$2>', $content);
-    }}
-    return $content;
-}}
-add_filter('the_content', '{safe_domain}_auto_alt', 99);
-
+// 4. ALT TEXT (solo logos — el alt automático por regex se eliminó: rompía
+//    scripts y HTML multilínea; el DOM de _optimize_output reescribe las imágenes de forma segura)
 function {safe_domain}_logo_alt($html) {{
     return str_replace(['alt=""', "alt=''"], 'alt="' . esc_attr(get_bloginfo('name')) . '"', $html);
 }}
@@ -1047,44 +1203,76 @@ function {safe_domain}_buffer_start() {{
     if (!is_admin()) ob_start('{safe_domain}_optimize_output');
 }}
 function {safe_domain}_optimize_output($html) {{
-    // 5a. Eliminar meta descriptions viejas (hardcodeadas por el theme) y poner la nuestra
-    $html = preg_replace('/<meta\s+name=[\\'\\"]description[\\'\\"][^>]*\/?>/i', '', $html);
-    $html = preg_replace('/<meta\s+property=[\\'\\"]og:description[\\'\\"][^>]*\/?>/i', '', $html);
-    $html = preg_replace('/<meta\s+name=[\\'\\"]twitter:description[\\'\\"][^>]*\/?>/i', '', $html);
-    // Inyectar meta description después de <head>
-    $meta_tag = {safe_domain}_build_meta_desc();
-    $html = preg_replace('/<head[^>]*>/i', '$0' . "\\n" . $meta_tag, $html, 1);
-    // 5b. Acortar title si es muy largo (>60 chars)
-    if (preg_match('/<title>(.*?)<\/title>/is', $html, $m)) {{
-        $old = $m[0];
-        $text = trim(strip_tags($m[1]));
-        if (mb_strlen($text) > 60) {{
-            $text = mb_substr($text, 0, 57) . '...';
-            $html = str_replace($old, '<title>' . esc_html($text) . '</title>', $html);
+    // Fail-safe: sin php-xml (DOMDocument) no modificamos nada
+    if (!class_exists('DOMDocument')) {{
+        return $html;
+    }}
+    $prev = libxml_use_internal_errors(true);
+    $doc = new DOMDocument('1.0', 'UTF-8');
+    // Envoltorio XML: fuerza UTF-8 y evita wrappers html/body automáticos
+    $doc->loadHTML('<?xml encoding="utf-8"?>' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    libxml_clear_errors();
+    libxml_use_internal_errors($prev);
+
+    // 5a. Quitar meta descriptions viejas (Yoast/RankMath/theme) — parseo DOM, no regex
+    foreach ($doc->getElementsByTagName('meta') as $meta) {{
+        $name = strtolower($meta->getAttribute('name'));
+        $prop = strtolower($meta->getAttribute('property'));
+        if ($name === 'description' || $name === 'twitter:description' || $prop === 'og:description') {{
+            $meta->parentNode->removeChild($meta);
         }}
     }}
-    // 5c. Asegurar exactamente 1 H1 (ni 0, ni 2+)
-    if (!preg_match('/<h1[\s>]/i', $html)) {{
-        $site_name = get_bloginfo('name');
-        $h1_tag = '<h1 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">' . esc_html($site_name) . '</h1>';
-        $html = preg_replace('/<body[^>]*>/i', '$0' . "\n" . $h1_tag, $html, 1);
-    }} elseif (preg_match_all('/<h1[\s>]/i', $html, $m) > 1) {{
-        // Hay multiples H1: conservar primero, convertir extras a h2
-        $seen = false;
-        $html = preg_replace_callback('/<h1([\s>])/i', function($m) use (&$seen) {{
-            if (!$seen) {{ $seen = true; return $m[0]; }}
-            return '<h2' . $m[1];
-        }}, $html);
-        $html = preg_replace_callback('/<\/h1>/i', function($m) use (&$seen) {{
-            static $count = 0; $count++;
-            if ($count <= 1) {{ return $m[0]; }}
-            return '</h2>';
-        }}, $html);
+    // Inyectar nuestra meta description al final de <head>
+    $heads = $doc->getElementsByTagName('head');
+    if ($heads->length) {{
+        $meta = $doc->createElement('meta');
+        $meta->setAttribute('name', 'description');
+        $meta->setAttribute('content', {safe_domain}_get_meta_desc());
+        $heads->item(0)->appendChild($meta);
     }}
-    // 5d. Lazy loading en todas las imagenes
-    $html = preg_replace('/<img(?!.*loading=)(.*?)>/i', '<img$1 loading="lazy">', $html);
-    return $html;
+
+    // 5b. Acortar title si es muy largo (>60 chars)
+    $titles = $doc->getElementsByTagName('title');
+    if ($titles->length) {{
+        $title = $titles->item(0);
+        $text = trim($title->textContent);
+        if (mb_strlen($text) > 60) {{
+            while ($title->firstChild) $title->removeChild($title->firstChild);
+            $title->appendChild($doc->createTextNode(mb_substr($text, 0, 57) . '...'));
+        }}
+    }}
+
+    // 5c. Exactamente 1 H1 (ni 0, ni 2+)
+    $h1s = $doc->getElementsByTagName('h1');
+    if ($h1s->length === 0) {{
+        $bodies = $doc->getElementsByTagName('body');
+        if ($bodies->length) {{
+            $h1 = $doc->createElement('h1');
+            $h1->setAttribute('style', 'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0');
+            $h1->appendChild($doc->createTextNode(get_bloginfo('name')));
+            $bodies->item(0)->insertBefore($h1, $bodies->item(0)->firstChild);
+        }}
+    }} elseif ($h1s->length > 1) {{
+        // Múltiples H1: conservar el primero, convertir los extras a h2
+        $extras = array();
+        for ($i = 1; $i < $h1s->length; $i++) $extras[] = $h1s->item($i);
+        foreach ($extras as $h) {{
+            $h2 = $doc->createElement('h2');
+            while ($h->firstChild) $h2->appendChild($h->firstChild);
+            $h->parentNode->replaceChild($h2, $h);
+        }}
+    }}
+
+    // 5d. Lazy loading: nunca al hero (fetchpriority) ni a los que ya declaran loading
+    foreach ($doc->getElementsByTagName('img') as $img) {{
+        if ($img->hasAttribute('loading') || $img->hasAttribute('fetchpriority')) continue;
+        $img->setAttribute('loading', 'lazy');
+    }}
+
+    $out = $doc->saveHTML();
+    return str_replace('<?xml encoding="utf-8"?>', '', $out);
 }}
+
 add_action('template_redirect', '{safe_domain}_buffer_start');
 add_action('shutdown', function() {{ if (ob_get_level()) ob_end_flush(); }});
 
@@ -1095,16 +1283,7 @@ function {safe_domain}_defer_scripts($tag, $handle, $src) {{
     return str_replace(' src=', ' defer src=', $tag);
 }}
 add_filter('script_loader_tag', '{safe_domain}_defer_scripts', 10, 3);
-
-// 7. CTA FLOTANTE + CONFIANZA (mejora conversión)
-function {safe_domain}_cta_flotante() {{
-    echo '<a href="#newsletter" style="position:fixed;bottom:20px;right:20px;background:#e63946;color:#fff;padding:12px 20px;border-radius:50px;font-weight:bold;text-decoration:none;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.25);font-family:Arial,sans-serif;font-size:14px;transition:transform 0.2s">Suscribite gratis</a>';
-}}
-function {safe_domain}_trust_bar() {{
-    echo '<div style="text-align:center;padding:12px;background:#111;color:#aaa;font-size:11px;font-family:Arial,sans-serif;letter-spacing:0.3px">Contenido actualizado diariamente &nbsp;|&nbsp; Garantía de fuentes verificadas &nbsp;|&nbsp; Sin spam &nbsp;|&nbsp; <a href="#newsletter" style="color:#75aadb;text-decoration:none;font-weight:bold">Suscribite gratis →</a></div>';
-}}
-add_action('wp_footer', '{safe_domain}_cta_flotante');
-add_action('wp_footer', '{safe_domain}_trust_bar');
+{cta_block}
 
 // == SOPORTE ==
 // ¿Problemas? Escribinos a soporte@delmonteanalitica.com
@@ -1285,9 +1464,9 @@ def _extraer_links_internos(soup, base_url: str, limit: int = 5) -> list[str]:
     return list(links)[:limit]
 
 
-def _analizar_multipagina(url: str, depth: int = 3) -> dict:
+def _analizar_multipagina(url: str, depth: int = 3, user_id: int | None = None) -> dict:
     """Analiza una URL y hasta 'depth' páginas internas adicionales."""
-    resultado = analizar(url)
+    resultado = analizar(url, user_id=user_id)
     if resultado.get("errores"):
         return resultado
 
@@ -1301,7 +1480,7 @@ def _analizar_multipagina(url: str, depth: int = 3) -> dict:
         links = _extraer_links_internos(soup, resultado.get("url_final", url), limit=depth - 1)
         for link in links:
             try:
-                sub = analizar(link)
+                sub = analizar(link, user_id=user_id)
                 if sub.get("errores"):
                     continue
                 avg = round(
@@ -1321,7 +1500,7 @@ def _analizar_multipagina(url: str, depth: int = 3) -> dict:
     return resultado
 
 
-def _guardar_analisis(resultado):
+def _guardar_analisis(resultado, user_id=None):
     """Guarda el análisis en disco para historial (sin html_raw, escritura atómica)."""
     dominio = urlparse(resultado["url"]).netloc.replace("www.", "")
     safe = re.sub(r"[^a-zA-Z0-9_-]", "_", dominio)
@@ -1329,6 +1508,8 @@ def _guardar_analisis(resultado):
     filename = f"{safe}_{ts}.json"
 
     to_save = {k: v for k, v in resultado.items() if k != "html_raw"}
+    if user_id is not None:
+        to_save["user_id"] = user_id
     path = _os.path.join(_ANALISIS_DIR, filename)
 
     # Escritura atómica: temp + rename evita archivos corruptos por crash concurrente
@@ -1350,8 +1531,10 @@ def _guardar_analisis(resultado):
     resultado["guardado_en"] = path.replace("\\", "/")
 
 
-def listar_analisis(limit=20):
-    """Lista los análisis guardados."""
+def listar_analisis(limit=20, user_id=None):
+    """Lista los análisis guardados del usuario (fail-closed: sin user_id → [])."""
+    if user_id is None:
+        return []
     if not _os.path.exists(_ANALISIS_DIR):
         return []
     files = sorted(
@@ -1360,15 +1543,19 @@ def listar_analisis(limit=20):
         reverse=True,
     )
     results = []
-    for f in files[:limit]:
+    for f in files:
         with open(f, "r", encoding="utf-8") as fp:
             data = json.load(fp)
-            results.append({
-                "url": data.get("url", ""),
-                "fecha": data.get("fecha", ""),
-                "promedio": round(
-                    sum(s for s, _ in data.get("scorecard", {}).values()) / max(len(data.get("scorecard", {})), 1), 1
-                ),
-                "archivo": _os.path.basename(f),
-            })
+        if data.get("user_id") != user_id:
+            continue
+        results.append({
+            "url": data.get("url", ""),
+            "fecha": data.get("fecha", ""),
+            "promedio": round(
+                sum(s for s, _ in data.get("scorecard", {}).values()) / max(len(data.get("scorecard", {})), 1), 1
+            ),
+            "archivo": _os.path.basename(f),
+        })
+        if len(results) >= limit:
+            break
     return results

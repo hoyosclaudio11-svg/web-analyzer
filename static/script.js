@@ -639,7 +639,6 @@ function renderNextSteps(data) {
           const dlUrl = '/api/download/' + encodeURIComponent(s.file.nombre);
           const params = [];
           if (currentReportHash) params.push('report_hash=' + encodeURIComponent(currentReportHash));
-          const ut = getUserToken(); if (ut) params.push('user_token=' + encodeURIComponent(ut));
           actionHtml = `<a href="${dlUrl}?${params.join('&')}" class="btn-download step-btn" download>
               ${s.cta}
             </a>`;
@@ -666,7 +665,6 @@ function renderSoluciones(soluciones) {
   body.innerHTML = soluciones.map(s => {
     const dlParams = [];
     if (currentReportHash) dlParams.push('report_hash=' + encodeURIComponent(currentReportHash));
-    const ut2 = getUserToken(); if (ut2) dlParams.push('user_token=' + encodeURIComponent(ut2));
     return `
       <div class="solucion-item">
         <div class="sol-type">.${esc(s.tipo)}</div>
@@ -857,7 +855,7 @@ function openAuthModalForFeedback(data) {
 // Funcion que ejecuta la descarga via fetch + blob
 async function triggerDownload(url) {
   try {
-    var resp = await fetch(url);
+    var resp = await fetch(url, { headers: apiHeaders() });
     if (resp.status === 403) {
       var data = await resp.json();
       if (data.action === 'feedback_required') {

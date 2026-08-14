@@ -1,0 +1,160 @@
+"""
+Tests QA críticos — MOTOR DE ANÁLISIS analyzer.py (8 de los 25 prioritarios).
+
+Cobertura (casos de la matriz de 200):
+  A1  E2        SSRF: representaciones alternas de IP ......... Alto
+  A2  E1        SSRF: DNS rebinding (no re-resolver) .......... Crítico
+  A3  E7        Respuesta sin límite de tamaño (gzip bomb) .... Crítico
+  A4  C16/A4    SPA renderizado en cliente se puntúa basura ... Crítico
+  A5  C8        alt="" decorativo se cuenta como sin-alt ...... Alto
+  A6  C4        Descripción en JSON-LD ignorada ............... Alto
+  A7  C11       Forms con aria-label penalizados .............. Alto
+  A9  E26       URL sin encode en PageSpeed Insights .......... Alto
+"""
+from unittest.mock import Mock, patch
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+from bs4 import BeautifulSoup
+
+from analyzer import (
+    _evaluar_accesibilidad,
+    _extraer_forms,
+    _extraer_imagenes,
+    _extraer_metadatos,
+    _fetch_pagespeed_insights,
+    _is_public_url,
+    _safe_get,
+    analizar,
+)
+
+
+# ---------------------------------------------------------------------------
+# A1 (E2) — SSRF: representaciones alternas de direcciones internas
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("url", [
+    "http://[::ffff:127.0.0.1]/",   # IPv4 mapeada a IPv6
+    "http://[::1]/",                # loopback IPv6
+    "http://127.1/",                # 127.0.0.1 abreviado
+    "http://2130706433/",           # 127.0.0.1 en decimal
+    "http://0x7f000001/",           # 127.0.0.1 en hex
+])
+def test_a1_ssrf_bloquea_representaciones_alternas(url):
+    ok, reason = _is_public_url(url)
+    assert not ok, f"URL interna no bloqueada: {url}"
+
+
+# ---------------------------------------------------------------------------
+# A2 (E1) — SSRF por DNS rebinding: pin de IP (no re-resolver)
+# ---------------------------------------------------------------------------
+def test_a2_ssrf_pina_la_ip_validada_y_no_re_resuelve():
+    with patch("analyzer.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("1.2.3.4", 80))]), \
+         patch("analyzer.requests.Session") as Sess:
+        sess = Sess.return_value
+        resp = Mock()
+        resp.is_redirect = False
+        resp.raise_for_status = Mock()
+        sess.get.return_value = resp
+        _safe_get("http://example.com/")
+        called_host = urlparse(sess.get.call_args[0][0]).hostname
+    # La conexión real debe ir a la IP ya validada (TOCTOU / rebinding).
+    assert called_host == "1.2.3.4"
+
+
+# ---------------------------------------------------------------------------
+# A3 (E7) — límite de tamaño de respuesta (gzip bomb / página gigante)
+# ---------------------------------------------------------------------------
+def test_a3_safe_get_rechaza_respuestas_gigantes():
+    with patch("analyzer.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("1.2.3.4", 80))]), \
+         patch("analyzer.requests.Session") as Sess:
+        sess = Sess.return_value
+        resp = Mock()
+        resp.is_redirect = False
+        resp.raise_for_status = Mock()
+        resp.headers = {"Content-Length": "999999999"}
+        sess.get.return_value = resp
+        with pytest.raises(ValueError):
+            _safe_get("http://example.com/")
+
+
+# ---------------------------------------------------------------------------
+# A4 (C16) — SPA renderizado en cliente: detectar y no puntuar HTML vacío
+# ---------------------------------------------------------------------------
+def test_a4_spa_se_detecta_y_no_se_puntua_html_vacio():
+    html = '<html><head><title>SPA</title></head><body><div id="root"></div></body></html>'
+    resp = Mock()
+    resp.url = "https://spa.com/"
+    resp.text = html
+    with patch("analyzer._safe_get", return_value=resp), \
+         patch("analyzer._fetch_pagespeed_insights", return_value=None), \
+         patch("analyzer._guardar_analisis"):
+        resultado = analizar("https://spa.com")
+    assert resultado.get("spa_detected") is True, (
+        "una SPA vacía se audita como si el contenido fuera el HTML crudo "
+        "(scorecard basura de 1/10 en SEO/UX)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# A5 (C8) — alt="" decorativo (válido WCAG) no debe contar como sin-alt
+# ---------------------------------------------------------------------------
+def test_a5_alt_vacio_decorativo_no_cuenta_como_sin_alt():
+    soup = BeautifulSoup(
+        '<img src="a.png" alt=""><img src="b.png" alt=""><img src="c.png">',
+        "html.parser",
+    )
+    imgs = _extraer_imagenes(soup, "https://s.com")
+    # Solo la que NO tiene atributo alt debería contar.
+    assert imgs["sin_alt"] == 1
+
+
+# ---------------------------------------------------------------------------
+# A6 (C4) — descripción en JSON-LD se debe reconocer como descripción válida
+# ---------------------------------------------------------------------------
+def test_a6_descripcion_jsonld_se_reconoce():
+    html = ('<html><head><title>X</title>'
+            '<script type="application/ld+json">'
+            '{"@type":"WebSite","description":"Desc JSON-LD valida"}'
+            '</script></head></html>')
+    soup = BeautifulSoup(html, "html.parser")
+    meta = _extraer_metadatos(soup, "https://s.com", "https://s.com")
+    assert meta["description"] == "Desc JSON-LD valida", (
+        "sitios modernos sin <meta name=description> pero con JSON-LD se "
+        "marcan como 'falta meta description' (falso positivo)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# A7 (C11) — inputs con aria-label no deben disparar "sin labels"
+# ---------------------------------------------------------------------------
+def test_a7_form_con_aria_label_no_penaliza_labels():
+    soup = BeautifulSoup(
+        '<form><input type="email" aria-label="Email" name="e">'
+        '<button>Enviar</button></form>',
+        "html.parser",
+    )
+    forms = _extraer_forms(soup)
+    score, detalles = _evaluar_accesibilidad(
+        {"sin_alt": 0},
+        {"h1": {"count": 1}, "jerarquia_ok": True},
+        forms,
+        soup,
+    )
+    assert "label" not in " ".join(detalles).lower(), (
+        "aria-label es un label accesible válido; no debe penalizarse"
+    )
+
+
+# ---------------------------------------------------------------------------
+# A9 (E26) — la URL debe ir URL-encodificada a PageSpeed Insights
+# ---------------------------------------------------------------------------
+def test_a9_psi_encoda_la_url_del_sitio():
+    with patch("analyzer.requests.get") as get:
+        get.return_value = Mock(status_code=200, json=lambda: {})
+        _fetch_pagespeed_insights("https://s.com/?x=1&key=HACK")
+        qs = parse_qs(urlparse(get.call_args[0][0]).query)
+    assert qs.get("url") == ["https://s.com/?x=1&key=HACK"], (
+        "la URL cruda se interpola en la query de PSI: los parámetros del "
+        "sitio (p. ej. key=) contaminan la llamada"
+    )
+    assert qs.get("key") != ["HACK"], "el key del sitio analizado filtrado a Google"
