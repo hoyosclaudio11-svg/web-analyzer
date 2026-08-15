@@ -298,3 +298,63 @@ def test_e15_lockout_por_cuenta_independiente_de_ip(client, tmp_path):
                 del db_mod._local.db
         else:
             db_mod._local.db = orig_local
+
+
+# ---------------------------------------------------------------------------
+# E40 — cabeceras de seguridad en todas las respuestas del server
+# ---------------------------------------------------------------------------
+def test_e40_cabeceras_de_seguridad(client):
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    assert r.headers.get("X-Content-Type-Options") == "nosniff", (
+        "falta X-Content-Type-Options: nosniff (E40)"
+    )
+    assert r.headers.get("X-Frame-Options") in ("SAMEORIGIN", "DENY"), (
+        "falta X-Frame-Options (E40)"
+    )
+    csp = r.headers.get("Content-Security-Policy") or ""
+    assert "frame-ancestors" in csp, "CSP sin frame-ancestors (E40)"
+    assert r.headers.get("Referrer-Policy"), "falta Referrer-Policy (E40)"
+
+
+# ---------------------------------------------------------------------------
+# E18 — XSS en el render: datos de texto del sitio siempre pasan por esc() (lock)
+# ---------------------------------------------------------------------------
+def test_e18_render_escapa_datos_del_sitio():
+    """Lock E18 — toda interpolación de datos de texto del sitio usa esc()."""
+    import re as _re
+
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "script.js")
+    src = open(ruta, encoding="utf-8").read()
+    assert "function esc(" in src, "falta la función esc() en el frontend"
+    campos = (
+        r"h\.(problema|categoria|gravedad|impacto|url|fecha)|"
+        r"r\.(titulo|problema|solucion|categoria|esfuerzo)|"
+        r"s\.(tipo|nombre|descripcion)|"
+        r"meta\.|imgs\.formatos|userData\.|fullUrl"
+    )
+    crudas = _re.findall(r"\$\{(?:" + campos + r")(?!\s*\?)", src)
+    escapadas = _re.findall(r"\$\{esc\((?:" + campos + r")", src)
+    assert escapadas, "no se encontraron interpolaciones escapadas de datos del sitio"
+    assert not crudas, f"interpolación sin esc() de datos del sitio (E18): {crudas}"
+
+
+# ---------------------------------------------------------------------------
+# E25 — path traversal en /api/download (lock: ya blindado)
+# ---------------------------------------------------------------------------
+def test_e25_traversal_en_download_bloqueado(client):
+    """Lock E25 — variantes de traversal nunca devuelven contenido del server."""
+    variantes = [
+        "../../etc/passwd",
+        "..%2f..%2fetc%2fpasswd",
+        "..%2e%2e%2f..%2e%2e%2fetc%2fpasswd",
+        "C:\\Windows\\win.ini",
+        "\\\\server\\share",
+        "....//....//etc/passwd",
+        "%2e%2e/%2e%2e/etc/passwd",
+    ]
+    for nombre in variantes:
+        r = client.get(f"/api/download/{nombre}")
+        assert r.status_code in (400, 403, 404), (
+            f"traversal {nombre!r} devolvió {r.status_code} (E25)"
+        )

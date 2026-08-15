@@ -239,6 +239,31 @@ def log_request(response):
     return response
 
 
+@app.after_request
+def security_headers(response):
+    """Cabeceras de seguridad mínimas en toda respuesta (E40).
+
+    Sin CSP/frame-ancestors/nosniff, el render de datos del sitio
+    analizado (E18) eleva el riesgo de clickjacking y MIME sniffing.
+    """
+    if "X-Content-Type-Options" not in response.headers:
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    if "X-Frame-Options" not in response.headers:
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    if "Referrer-Policy" not in response.headers:
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if "Content-Security-Policy" not in response.headers:
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self' https:; "
+            "frame-ancestors 'self'"
+        )
+    return response
+
+
 # =============================================================================
 # Rutas públicas (no requieren auth)
 # =============================================================================

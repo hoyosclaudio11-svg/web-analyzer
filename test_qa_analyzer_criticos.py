@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 
 from analyzer import (
     _evaluar_accesibilidad,
+    _evaluar_seo,
     _extraer_forms,
     _extraer_headings,
     _extraer_imagenes,
@@ -325,3 +326,26 @@ def test_a16_img_sin_loading_sigue_contando_como_sin_lazy():
     assert data["sin_lazy"] == 1, (
         "imagen sin loading dejó de contarse como sin lazy (sobre-corrección A16)"
     )
+
+
+# ---------------------------------------------------------------------------
+# A31 — meta robots noindex: se avisa, no se audita como SEO normal
+# ---------------------------------------------------------------------------
+def test_a31_noindex_se_avisa_y_no_genera_recomendaciones_falsas():
+    html = (
+        '<html><head><meta name="robots" content="noindex,nofollow">'
+        '<title>Una página interna</title></head><body><h1>Titulo</h1></body></html>'
+    )
+    soup = BeautifulSoup(html, "html.parser")
+    meta = _extraer_metadatos(soup, "https://x.com/interna", "https://x.com/interna")
+    assert "noindex" in (meta.get("robots") or "").lower(), (
+        "robots noindex no se extrae (A31)"
+    )
+    score, detalles = _evaluar_seo(meta, {"h1": {"count": 1}}, soup)
+    assert any("noindex" in d.lower() for d in detalles), (
+        "página noindex auditada como SEO normal sin aviso (A31)"
+    )
+    assert not any("Falta" in d for d in detalles), (
+        f"recomendaciones SEO falsas para página noindex (A31): {detalles}"
+    )
+    assert score == 10, f"score penalizado pese a noindex (A31): {score}"

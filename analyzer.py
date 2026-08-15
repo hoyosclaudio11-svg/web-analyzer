@@ -813,6 +813,15 @@ def _evaluar_seo(meta, headings, soup):
     score = 10
     detalles = []
 
+    # A31 — página no indexable: las recomendaciones SEO no aplican. Avisar
+    # en vez de puntuar normal (evita falso diagnóstico «arreglá el SEO»).
+    robots = (meta.get("robots") or "").lower()
+    if "noindex" in robots:
+        detalles.append(
+            "La página declara noindex — no debe indexarse; el score SEO es informativo"
+        )
+        return score, detalles
+
     # Title
     if not meta["title"]:
         score -= 4
