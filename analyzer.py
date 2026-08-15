@@ -822,6 +822,13 @@ def _evaluar_seo(meta, headings, soup):
         )
         return score, detalles
 
+    # C15 — idioma declarado en <html lang="..."> (WCAG 3.1.1)
+    if soup is not None and not (soup.html and soup.html.get("lang")):
+        score -= 1
+        detalles.append(
+            "Falta el atributo lang en <html> — declarar el idioma (WCAG 3.1.1)"
+        )
+
     # Title
     if not meta["title"]:
         score -= 4

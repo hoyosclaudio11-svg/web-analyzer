@@ -358,3 +358,136 @@ def test_e25_traversal_en_download_bloqueado(client):
         assert r.status_code in (400, 403, 404), (
             f"traversal {nombre!r} devolvió {r.status_code} (E25)"
         )
+
+
+# ---------------------------------------------------------------------------
+# E35 — IDOR en monitoreo: DELETE /api/monitor?id=N solo borra lo del dueño
+# ---------------------------------------------------------------------------
+def test_e35_idor_delete_monitor_solo_el_dueno(client, tmp_path):
+    """E35 — usuario B no puede borrar el monitoreo de A (IDOR)."""
+    mod = client.app_module
+    mod.limiter.reset()
+    import database as db_mod
+
+    orig_path = db_mod.DB_PATH
+    orig_local = getattr(db_mod._local, "db", None)
+    db_mod.DB_PATH = tmp_path / "test.db"
+    if hasattr(db_mod._local, "db"):
+        del db_mod._local.db
+    try:
+        db_mod.init_db()
+
+        def _login(email):
+            client.post(
+                "/api/auth/register", json={"email": email, "password": "pass1234"}
+            )
+            r = client.post(
+                "/api/auth/login", json={"email": email, "password": "pass1234"}
+            )
+            return r.get_json()["token"]
+
+        token_a = _login("a@x.com")
+        r = client.post(
+            "/api/monitor",
+            json={"url": "https://a.com", "score": 8},
+            headers={"X-User-Token": token_a},
+        )
+        assert r.status_code == 201, r.get_json()
+        mid = r.get_json()["id"]
+
+        # B intenta borrar el monitoreo de A → 404, y el monitoreo sigue existiendo
+        token_b = _login("b@x.com")
+        r = client.delete(
+            f"/api/monitor?id={mid}", headers={"X-User-Token": token_b}
+        )
+        assert r.status_code == 404, (
+            f"usuario B pudo borrar el monitoreo de A (E35 IDOR): {r.status_code}"
+        )
+        r = client.get("/api/monitor", headers={"X-User-Token": token_a})
+        ids = [u["id"] for u in r.get_json()]
+        assert mid in ids, "el monitoreo de A desapareció tras el intento de B (E35)"
+
+        # A sí puede borrar el suyo
+        r = client.delete(
+            f"/api/monitor?id={mid}", headers={"X-User-Token": token_a}
+        )
+        assert r.status_code == 200
+    finally:
+        mod.limiter.reset()
+        db_mod.DB_PATH = orig_path
+        if orig_local is None:
+            if hasattr(db_mod._local, "db"):
+                del db_mod._local.db
+        else:
+            db_mod._local.db = orig_local
+
+
+# ---------------------------------------------------------------------------
+# E29 — rate limit memory://: consistente en 1 worker y storage configurable
+# ---------------------------------------------------------------------------
+def test_e29_rate_limit_activo_30_por_minuto(client):
+    """E29 — el límite default (30/min) se aplica de forma consistente en 1 worker."""
+    mod = client.app_module
+    mod.limiter.reset()
+    try:
+        statuses = [client.get("/api/health").status_code for _ in range(31)]
+        assert statuses.count(200) == 30, (
+            f"el límite default no es 30/min (E29): {statuses.count(200)} éxitos de 31"
+        )
+        assert statuses[-1] == 429, (
+            f"el request 31 no fue bloqueado por el rate limit (E29): {statuses[-1]}"
+        )
+    finally:
+        mod.limiter.reset()
+
+
+def test_e29_storage_uri_configurable_por_env():
+    """E29 — el storage del rate limit debe poder apuntar a un storage compartido."""
+    import app as app_mod
+
+    src = open(app_mod.__file__, encoding="utf-8").read()
+    assert 'os.environ.get("RATE_LIMIT_STORAGE_URI", "memory://")' in src, (
+        "storage_uri hardcodeado a memory:// sin poder usar Redis multi-worker (E29)"
+    )
+    assert app_mod.limiter._storage_uri == "memory://", (
+        "el default documentado debe ser memory:// (E29)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# E16 — registro sin validación de email (a@b.c crea cuenta)
+# ---------------------------------------------------------------------------
+def test_e16_registro_rechaza_email_invalido(client, tmp_path):
+    """E16 — emails con formato inválido (a@b.c) no crean cuenta."""
+    mod = client.app_module
+    mod.limiter.reset()
+    import database as db_mod
+
+    orig_path = db_mod.DB_PATH
+    orig_local = getattr(db_mod._local, "db", None)
+    db_mod.DB_PATH = tmp_path / "test.db"
+    if hasattr(db_mod._local, "db"):
+        del db_mod._local.db
+    try:
+        db_mod.init_db()
+        for invalido in ("a@b.c", "no-es-email", "a@b."):
+            r = client.post(
+                "/api/auth/register",
+                json={"email": invalido, "password": "pass1234"},
+            )
+            assert r.status_code == 400, (
+                f"email inválido aceptado (E16): {invalido!r} -> {r.status_code}"
+            )
+        r = client.post(
+            "/api/auth/register",
+            json={"email": "valido@dominio.com.ar", "password": "pass1234"},
+        )
+        assert r.status_code == 201, f"email válido rechazado (E16): {r.status_code}"
+    finally:
+        mod.limiter.reset()
+        db_mod.DB_PATH = orig_path
+        if orig_local is None:
+            if hasattr(db_mod._local, "db"):
+                del db_mod._local.db
+        else:
+            db_mod._local.db = orig_local

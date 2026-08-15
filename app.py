@@ -56,7 +56,9 @@ limiter = Limiter(
     get_remote_address,
     app=app,
     default_limits=["30 per minute"],
-    storage_uri="memory://",
+    # E29 — storage configurable por env: memory:// es por proceso (se resetea en
+    # restart y no es multi-worker); apuntar a Redis en producción multi-worker.
+    storage_uri=os.environ.get("RATE_LIMIT_STORAGE_URI", "memory://"),
 )
 
 API_KEY = os.environ.get("ANALYZER_API_KEY", "")

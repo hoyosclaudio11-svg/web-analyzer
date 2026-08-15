@@ -292,7 +292,8 @@ def _verify_password(password: str, stored: str) -> bool:
 def create_user(email: str, password: str) -> dict | None:
     c = _conn()
     email = email.strip().lower()
-    if not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
+    # E16 — validación de formato mínima: TLD de al menos 2 letras (a@b.c inválido)
+    if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email):
         raise ValueError("Email invalido")
     if len(password) < 6:
         raise ValueError("La contrasena debe tener al menos 6 caracteres")

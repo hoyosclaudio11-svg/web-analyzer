@@ -349,3 +349,38 @@ def test_a31_noindex_se_avisa_y_no_genera_recomendaciones_falsas():
         f"recomendaciones SEO falsas para página noindex (A31): {detalles}"
     )
     assert score == 10, f"score penalizado pese a noindex (A31): {score}"
+
+
+# ---------------------------------------------------------------------------
+# C15 — <html> sin atributo lang (WCAG 3.1.1): penalización leve
+# ---------------------------------------------------------------------------
+def _html_seo_basico(lang=None):
+    lang_attr = f' lang="{lang}"' if lang else ""
+    return (
+        f"<html{lang_attr}><head>"
+        "<title>Un titulo perfecto para una pagina de prueba</title>"
+        '<meta name="description" content="Una meta description suficientemente larga para SEO basico de la pagina de prueba.">'
+        '<meta property="og:title" content="Un titulo de prueba">'
+        '<meta property="og:description" content="Descripcion del share.">'
+        '<meta property="og:image" content="https://x.com/img.jpg">'
+        '<meta name="twitter:card" content="summary_large_image">'
+        '<link rel="canonical" href="https://x.com/">'
+        "</head><body><h1>Titulo</h1></body></html>"
+    )
+
+
+def test_c15_html_sin_lang_penaliza_leve():
+    soup = BeautifulSoup(_html_seo_basico(), "html.parser")
+    meta = _extraer_metadatos(soup, "https://x.com", "https://x.com")
+    score, detalles = _evaluar_seo(meta, {"h1": {"count": 1}}, soup)
+    assert any("lang" in d.lower() for d in detalles), (
+        f"falta el aviso de lang en <html> (C15): {detalles}"
+    )
+    assert score == 9, f"sin lang debería penalizar 1 punto (C15): {score}"
+
+
+def test_c15_html_con_lang_no_penaliza():
+    soup = BeautifulSoup(_html_seo_basico(lang="es"), "html.parser")
+    meta = _extraer_metadatos(soup, "https://x.com", "https://x.com")
+    score, detalles = _evaluar_seo(meta, {"h1": {"count": 1}}, soup)
+    assert score == 10, f"html con lang penalizado (C15 control): {score} {detalles}"
