@@ -267,12 +267,12 @@ def test_d19_plugin_wordpress_solo_si_hay_wordpress():
     meta = {"title": "Mi Sitio", "description": "Descripción de ejemplo del sitio"}
     sol = _generar_soluciones(base, "<html></html>", meta, tech=[])
     nombres = [s["nombre"] for s in sol]
-    assert not any(n.endswith("optimizer.zip") for n in nombres), (
+    assert not any(re.search(r"optimizer_[0-9a-f]{6}\.zip$", n) for n in nombres), (
         "se genera el plugin WordPress para un sitio que NO es WordPress (D19): "
         "el cliente Wix/Squarespace recibe un ZIP inútil"
     )
     sol_wp = _generar_soluciones(base, "<html></html>", meta, tech=["WordPress"])
-    assert any(n.endswith("optimizer.zip") for n in [s["nombre"] for s in sol_wp]), (
+    assert any(re.search(r"optimizer_[0-9a-f]{6}\.zip$", n) for n in [s["nombre"] for s in sol_wp]), (
         "con WordPress detectado el plugin debería ofrecerse"
     )
 
@@ -353,7 +353,7 @@ def test_e22_safe_domain_con_digito_genera_php_valido():
     }
     meta = {"title": "2do Sitio", "description": "Descripción de ejemplo"}
     sol = _generar_soluciones(base, "<html></html>", meta, tech=["WordPress"])
-    zip_sol = next(s for s in sol if s["nombre"].endswith("optimizer.zip"))
+    zip_sol = next(s for s in sol if re.search(r"optimizer_[0-9a-f]{6}\.zip$", s["nombre"]))
     with zipfile.ZipFile(io.BytesIO(zip_sol["contenido"])) as zf:
         code = zf.read(zf.namelist()[0]).decode("utf-8")
     assert not re.search(r"function\s+\d", code), (
@@ -383,7 +383,7 @@ def test_b19_document_write_inline_desactiva_defer():
 
     def _code(html):
         sol = _generar_soluciones(base, html, meta, tech=["WordPress"])
-        zip_sol = next(s for s in sol if s["nombre"].endswith("optimizer.zip"))
+        zip_sol = next(s for s in sol if re.search(r"optimizer_[0-9a-f]{6}\.zip$", s["nombre"]))
         with zipfile.ZipFile(io.BytesIO(zip_sol["contenido"])) as zf:
             return zf.read(zf.namelist()[0]).decode("utf-8")
 
@@ -398,3 +398,28 @@ def test_b19_document_write_inline_desactiva_defer():
     assert "script_loader_tag" in code_ok, (
         "el defer dejó de generarse para sitios sin document.write (sobre-corrección B19)"
     )
+
+
+# ---------------------------------------------------------------------------
+# B29 — spam en el newsletter: honeypot oculto, el bot nunca guarda
+# ---------------------------------------------------------------------------
+def test_b29_newsletter_tiene_honeypot_y_ignora_bots():
+    """El form tiene un campo honeypot oculto; si viene lleno, éxito falso sin guardar."""
+    code = _gen()
+
+    # 1) El form incluye el campo honeypot (invisible para humanos)
+    assert re.search(r"name=[\"']mi_sitio_com_ar_website[\"']", code), (
+        "el form del newsletter no tiene el campo honeypot (B29)"
+    )
+    assert "-9999px" in code, (
+        "el honeypot no está oculto fuera de pantalla (B29)"
+    )
+
+    # 2) El handler descarta el POST si el honeypot viene lleno
+    assert re.search(r"empty\(\$_POST\['mi_sitio_com_ar_website'\]\)", code), (
+        "el handler no chequea el honeypot antes de guardar (B29)"
+    )
+
+    # 3) El guardado real sigue atrás: nonce + consent + update_option intactos
+    assert "wp_verify_nonce" in code, "el fix rompió la verificación nonce (B29)"
+    assert "update_option" in code, "el fix rompió el guardado legítimo (B29)"

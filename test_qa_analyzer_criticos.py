@@ -11,11 +11,14 @@ Cobertura (casos de la matriz de 200):
   A7  C11       Forms con aria-label penalizados .............. Alto
   A9  E26       URL sin encode en PageSpeed Insights .......... Alto
 """
+import re
 from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 from bs4 import BeautifulSoup
+
+import analyzer
 
 from analyzer import (
     _evaluar_accesibilidad,
@@ -25,6 +28,7 @@ from analyzer import (
     _extraer_imagenes,
     _extraer_metadatos,
     _fetch_pagespeed_insights,
+    _generar_soluciones,
     _is_public_url,
     _safe_get,
     analizar,
@@ -384,3 +388,146 @@ def test_c15_html_con_lang_no_penaliza():
     meta = _extraer_metadatos(soup, "https://x.com", "https://x.com")
     score, detalles = _evaluar_seo(meta, {"h1": {"count": 1}}, soup)
     assert score == 10, f"html con lang penalizado (C15 control): {score} {detalles}"
+
+
+# ---------------------------------------------------------------------------
+# A35 — credenciales en la URL: userinfo nunca debe persistir ni loguearse
+# ---------------------------------------------------------------------------
+def test_a35_analizar_quita_userinfo_de_la_url():
+    """https://user:pass@host entra limpio a todo el pipeline (DB, plugin, email)."""
+    html = _html_seo_basico(lang="es")
+    with patch("analyzer._safe_get") as sg, \
+         patch("analyzer._fetch_pagespeed_insights", return_value={}), \
+         patch("analyzer._guardar_analisis"):
+        resp = Mock()
+        resp.text = html
+        resp.url = "https://ejemplo.com/"
+        sg.return_value = resp
+        resultado = analizar("https://user:pass@ejemplo.com/")
+
+    assert "user:pass" not in resultado["url"], (
+        "resultado['url'] persiste las credenciales de la URL (A35)"
+    )
+    assert resultado["url"] == "https://ejemplo.com/", resultado["url"]
+    assert "user:pass" not in str(resultado.get("url_final", "")), (
+        "url_final preserva las credenciales (A35)"
+    )
+    # El fetch recibe la URL limpia: las credenciales no viajan a la red
+    assert sg.call_args[0][0] == "https://ejemplo.com/", (
+        f"el fetch recibió la URL con credenciales: {sg.call_args[0][0]}"
+    )
+
+
+def test_a35_sanear_log_quita_userinfo_de_urls():
+    """_sanear_log debe quitar user:pass@ de las URLs antes de escribir el log."""
+    import app as app_module
+    texto = "trace=abc url=https://user:pass@x.com/analizar?d=1 depth=1 Analizando"
+    saneado = app_module._sanear_log(texto)
+    assert "user:pass@" not in saneado, (
+        f"el log preserva las credenciales de la URL (A35): {saneado}"
+    )
+    assert "https://x.com/analizar" in saneado, (
+        f"la sanitización rompió la URL legítima: {saneado}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# A22 — HTTP 200 con página de error (site caído): avisar, no scorecard basura
+# ---------------------------------------------------------------------------
+def test_a22_pagina_de_error_en_200_avisa_sin_scorecard():
+    """Una plantilla de error servida con 200 NO es el sitio: sin scorecard."""
+    with patch("analyzer._safe_get") as sg:
+        resp = Mock()
+        resp.text = "<html><body>Error establishing a database connection</body></html>"
+        resp.url = "http://x.com/"
+        sg.return_value = resp
+        resultado = analizar("http://x.com/")
+
+    assert resultado["errores"], (
+        "la página de error en 200 no genera aviso en errores (A22)"
+    )
+    assert any("error" in e.lower() for e in resultado["errores"]), resultado["errores"]
+    assert resultado["scorecard"] == {}, (
+        "la página de error se auditó con scorecard (A22)"
+    )
+
+
+def test_a22_pagina_normal_no_dispara_aviso():
+    """Control: una página normal en 200 no se confunde con plantilla de error."""
+    with patch("analyzer._safe_get") as sg, \
+         patch("analyzer._fetch_pagespeed_insights", return_value={}), \
+         patch("analyzer._guardar_analisis"):
+        resp = Mock()
+        resp.text = _html_seo_basico(lang="es")
+        resp.url = "http://tienda.com/"
+        sg.return_value = resp
+        resultado = analizar("http://tienda.com/")
+
+    assert not resultado["errores"], (
+        f"falso positivo de página de error (A22): {resultado['errores']}"
+    )
+    assert resultado["scorecard"], "una página normal no generó scorecard"
+
+
+# ---------------------------------------------------------------------------
+# D16 — el ZIP del plugin debe tener nombre único por análisis (multitienda)
+# ---------------------------------------------------------------------------
+def _resultado_wordpress(url="https://www.ejemplo.com/"):
+    return {
+        "url": url,
+        "scorecard": {"Rendimiento": 5, "Accesibilidad": 5, "SEO": 5, "UX": 5, "Conversión": 5},
+        "meta": {
+            "title": "Ejemplo",
+            "og_site_name": "Ejemplo",
+            "description": "Descripción de ejemplo",
+        },
+        "forms": {"con_email": 0},
+    }
+
+
+def test_d16_zip_nombre_unico_por_analisis():
+    """Dos análisis del mismo dominio no pueden generar el mismo ZIP (se pisan)."""
+    resultado = _resultado_wordpress()
+    html = "<html><head></head><body><h1>H</h1></body></html>"
+    meta = dict(resultado["meta"])
+    tech = ["WordPress"]
+
+    s1 = _generar_soluciones(dict(resultado), html, dict(meta), list(tech))
+    s2 = _generar_soluciones(dict(resultado), html, dict(meta), list(tech))
+
+    z1 = next(s["nombre"] for s in s1 if s["tipo"] == "zip")
+    z2 = next(s["nombre"] for s in s2 if s["tipo"] == "zip")
+    assert z1 != z2, (
+        f"dos análisis del mismo dominio generan el mismo ZIP: {z1} (D16)"
+    )
+    assert re.match(r"^ejemplo_com_optimizer_[0-9a-f]{6}\.zip$", z1), (
+        f"el nombre del ZIP no incluye el token único: {z1}"
+    )
+
+
+def test_d16_zip_persiste_sin_colision(monkeypatch, tmp_path):
+    """Ambos ZIPs persisten en output/ — el segundo no sobrescribe al primero."""
+    analisis_dir = tmp_path / "analisis"
+    output_dir = tmp_path / "output"
+    analisis_dir.mkdir()
+    output_dir.mkdir()
+    monkeypatch.setattr(analyzer, "_ANALISIS_DIR", str(analisis_dir))
+    monkeypatch.setattr(analyzer, "_OUTPUT_DIR", str(output_dir))
+
+    resultado = _resultado_wordpress()
+    html = "<html><head></head><body><h1>H</h1></body></html>"
+    meta = dict(resultado["meta"])
+    tech = ["WordPress"]
+
+    r1 = dict(resultado)
+    r1["soluciones"] = _generar_soluciones(dict(resultado), html, dict(meta), list(tech))
+    analyzer._guardar_analisis(r1)
+
+    r2 = dict(resultado)
+    r2["soluciones"] = _generar_soluciones(dict(resultado), html, dict(meta), list(tech))
+    analyzer._guardar_analisis(r2)
+
+    zips = [f for f in output_dir.iterdir() if f.name.endswith(".zip")]
+    assert len(zips) == 2, (
+        f"el 2º análisis pisó el ZIP del 1º: {[f.name for f in zips]} (D16)"
+    )

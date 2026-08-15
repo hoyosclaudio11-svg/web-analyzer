@@ -139,8 +139,10 @@ log = logging.getLogger("web-analyzer")
 
 def _sanear_log(texto: str) -> str:
     """Evita log injection/forging: CRLF en entradas (URLs, paths) no crea
-    líneas falsas en el archivo de log (E31)."""
-    return str(texto).replace("\r", "\\r").replace("\n", "\\n")
+    líneas falsas en el archivo de log (E31), y las credenciales embebidas en
+    URLs (user:pass@) no quedan en el log (A35)."""
+    texto = str(texto).replace("\r", "\\r").replace("\n", "\\n")
+    return re.sub(r"//[^/\s@]+@", "//", texto)
 
 
 OUTPUT_DIR = BASE_DIR / "output"

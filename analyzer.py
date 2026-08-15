@@ -6,6 +6,7 @@ import os
 import re
 import json
 import hashlib
+import secrets
 import zipfile
 import io
 import socket
@@ -96,6 +97,20 @@ def _is_public_url(url):
     return ok, reason
 
 
+def _quitar_userinfo(url):
+    """Quita user:pass@ de una URL antes de usarla/persistirla (A35).
+
+    Las credenciales embebidas en la URL viajan como Basic Auth, se persisten
+    en analisis/, entran al email del lead y al site_url del plugin generado.
+    Al limpiarlas al entrar, ningún consumidor posterior las ve.
+    """
+    parsed = urlparse(url)
+    if not parsed.username:
+        return url
+    netloc = parsed.netloc.rsplit("@", 1)[-1]
+    return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+
+
 def _url_con_ip(url, ip_str):
     """Reemplaza el hostname por la IP validada, preservando puerto/query (pinning)."""
     parsed = urlparse(url)
@@ -111,6 +126,34 @@ def _url_con_ip(url, ip_str):
 
 
 _MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # 10 MB — anti gzip-bomb / páginas gigantes
+
+
+# Marcadores de plantillas de error servidas con HTTP 200 (A22). Lista acotada
+# a propósito: solo frases inequívocas de site caído, para no falsear en páginas
+# legítimas que mencionen esas palabras.
+_MARCADORES_PAGINA_ERROR = (
+    "error establishing a database connection",
+    "database connection lost",
+    "error al conectar con la base de datos",
+    "no se pudo conectar a la base de datos",
+    "internal server error",
+    "500 internal server error",
+    "site under maintenance",
+    "sitio en mantenimiento",
+)
+
+
+def _es_pagina_de_error(html):
+    """True si el HTML parece una plantilla de error (site caído) servida con 200.
+
+    Un sitio caído NO es el sitio real: auditarlo devolvería un scorecard basura
+    (A22). Solo se chequea en respuestas 200 — las 4xx/5xx ya abortan en
+    _safe_get — y solo en el head del HTML para acotar falsos positivos.
+    """
+    if not html:
+        return False
+    head = html[:50000].lower()
+    return any(m in head for m in _MARCADORES_PAGINA_ERROR)
 
 
 def _detectar_waf(resp):
@@ -224,6 +267,8 @@ def analizar(url, user_id=None):
     - código de soluciones
     - archivos generados
     """
+    # A35: las credenciales en la URL nunca deben persistir ni viajar a la red
+    url = _quitar_userinfo(url)
     resultado = {
         "url": url,
         "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -244,6 +289,15 @@ def analizar(url, user_id=None):
         resultado["html_raw"] = html
     except Exception as e:
         resultado["errores"].append(f"No se pudo acceder a la URL: {e}")
+        return resultado
+
+    # A22 — HTTP 200 con plantilla de error (site caído): no es el sitio real.
+    # Auditarla devolvería un scorecard basura; avisar y salir sin puntuar.
+    if _es_pagina_de_error(html):
+        resultado["errores"].append(
+            "La página devuelve una plantilla de error (sitio caído o en "
+            "mantenimiento) — el análisis no es representativo"
+        )
         return resultado
 
     soup = BeautifulSoup(html, "html.parser")
@@ -1107,8 +1161,11 @@ Agregar en el `<head>`:
         hay_document_write = bool(re.search(r"document\.write\s*\(", html, re.I))
         plugin_code = _generar_plugin_wordpress(resultado, safe_domain, hay_document_write)
         plugin_zip = _crear_zip_plugin(safe_domain, plugin_code)
+        # D16 — nombre único por análisis: dos análisis del mismo dominio (multitienda)
+        # no pueden pisarse en output/ (el front descarga por s.nombre del response)
+        token_zip = secrets.token_hex(3)
         soluciones.append({
-            "nombre": f"{safe_domain}_optimizer.zip",
+            "nombre": f"{safe_domain}_optimizer_{token_zip}.zip",
             "tipo": "zip",
             "descripcion": "Plugin WordPress listo para instalar. Descargar ZIP y subir a Plugins > Anadir nuevo > Subir plugin.",
             "contenido": plugin_zip,
@@ -1288,8 +1345,9 @@ add_filter('widget_custom_html_content', 'do_shortcode');
 
 // NEWSLETTER SHORTCODE [newsletter]
 function {safe_domain}_newsletter_shortcode() {{
-    // Procesar envío del formulario (anti-spam: nonce + sanitización)
-    if (isset($_POST['email'], $_POST['{safe_domain}_consent'], $_POST['{safe_domain}_newsletter_nonce']) && wp_verify_nonce($_POST['{safe_domain}_newsletter_nonce'], '{safe_domain}_newsletter')) {{
+    // Anti-spam: honeypot oculto — un humano nunca lo completa, un bot sí (B29).
+    // empty() sin isset no da warning: el POST normal (sin honeypot) pasa.
+    if (empty($_POST['{safe_domain}_website']) && isset($_POST['email'], $_POST['{safe_domain}_consent'], $_POST['{safe_domain}_newsletter_nonce']) && wp_verify_nonce($_POST['{safe_domain}_newsletter_nonce'], '{safe_domain}_newsletter')) {{
         $sub_email = sanitize_email($_POST['email']);
         if (is_email($sub_email)) {{
             $subs = get_option('{safe_domain}_subscribers', array());
@@ -1301,6 +1359,9 @@ function {safe_domain}_newsletter_shortcode() {{
         }} else {{
             echo '<p style="margin:10px 0 0;font-size:13px;color:#ff6b6b">Email inválido. Revisalo e intentá de nuevo.</p>';
         }}
+    }} elseif (!empty($_POST['{safe_domain}_website'])) {{
+        // Bot: responder éxito falso sin guardar nada (B29)
+        echo '<p style="margin:10px 0 0;font-size:13px;color:#7CFC98">✅ ¡Gracias! Te suscribiste correctamente.</p>';
     }}
     ob_start();
     ?>
@@ -1309,6 +1370,8 @@ function {safe_domain}_newsletter_shortcode() {{
       <p style="margin:0 0 16px;font-size:13px;color:#aaa">Suscribite gratis y no te pierdas ninguna actualización.</p>
       <form method="post" action="" style="display:flex;flex-direction:column;gap:10px">
         <?php wp_nonce_field('{safe_domain}_newsletter', '{safe_domain}_newsletter_nonce'); ?>
+        <input type="text" name="{safe_domain}_website" value="" tabindex="-1" autocomplete="off"
+               aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px">
         <label for="newsletter_email" style="font-size:12px;color:#aaa;margin-bottom:-6px">Tu email</label>
         <input type="email" name="email" id="newsletter_email" placeholder="tu@email.com" required
                style="padding:12px;border:1px solid #333;border-radius:6px;font-size:14px;background:#111;color:#fff">
