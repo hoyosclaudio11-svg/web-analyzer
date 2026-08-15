@@ -259,3 +259,38 @@ def test_c13_contraste_alto_no_se_penaliza():
         soup,
     )
     assert score == 10, "contraste correcto penalizado (falso positivo)"
+
+
+# ---------------------------------------------------------------------------
+# A40 — loop de redirects: el cuerpo de la 302 final no se audita como sitio
+# ---------------------------------------------------------------------------
+def test_a40_loop_de_redirects_aborta():
+    """Tras 10 saltos, la 302 final no es el sitio: error claro, no HTML del redirect."""
+    with patch("analyzer.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("1.2.3.4", 80))]), \
+         patch("analyzer.requests.Session") as Sess:
+        sess = Sess.return_value
+        resp = Mock()
+        resp.is_redirect = True
+        resp.status_code = 302
+        resp.headers = {"Location": "http://example.com/"}
+        resp.text = "<html><body>Redirecting...</body></html>"
+        sess.get.return_value = resp
+        with pytest.raises(ValueError) as exc:
+            _safe_get("http://example.com/")
+        assert "redirect" in str(exc.value).lower(), (
+            "se audita el cuerpo del redirect como si fuera el sitio (A40)"
+        )
+
+
+def test_a40_analizar_reporta_loop_de_redirects():
+    """El análisis propaga el loop de redirects a errores, no devuelve scorecard."""
+    with patch(
+        "analyzer._safe_get",
+        side_effect=ValueError(
+            "Demasiados redirects al acceder a http://example.com/ — se detuvo tras 10 saltos"
+        ),
+    ):
+        resultado = analizar("http://example.com/")
+    assert any("redirect" in e.lower() for e in resultado["errores"]), (
+        "el usuario recibe un scorecard en vez del aviso de loop de redirects (A40)"
+    )

@@ -172,6 +172,13 @@ def _safe_get(url, timeout=15):
                 hops += 1
                 continue
             break
+        # Loop de redirects: la 3xx final no es el sitio — auditar su cuerpo
+        # devolvería un scorecard del redirect (A40). raise_for_status() no
+        # cubre 3xx, así que lo detectamos explícitamente.
+        if resp.is_redirect or resp.status_code in (301, 302, 303, 307, 308):
+            raise ValueError(
+                f"Demasiados redirects al acceder a {url} — se detuvo tras {hops} saltos"
+            )
         # WAF/anti-bot (Cloudflare/DataDome/Imperva): el HTML del challenge no
         # es el sitio real — abortar con mensaje claro, no auditar basura (A3)
         waf = _detectar_waf(resp)
@@ -1025,6 +1032,10 @@ def _generar_soluciones(resultado, html, meta, tech):
     soluciones = []
     dominio = urlparse(resultado["url"]).netloc.replace("www.", "")
     safe_domain = re.sub(r"[^a-zA-Z0-9_]", "_", dominio)
+    # PHP: un identificador no puede empezar con dígito (2do.com.ar -> w2do_com_ar).
+    # Sin el prefijo, el plugin generado sería sintácticamente inválido (E22).
+    if not safe_domain or safe_domain[0].isdigit():
+        safe_domain = "w" + safe_domain
 
     # --- Solución 1: Meta tags fix (siempre útil) ---
     current_title = meta.get("title") or "TITULO DEL SITIO"

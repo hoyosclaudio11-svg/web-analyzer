@@ -334,3 +334,31 @@ def test_b25_defer_excluye_widgets_de_terceros():
             f"el defer no excluye el widget de terceros {widget} — "
             "document.write + defer rompe el widget (B25)"
         )
+
+
+# ---------------------------------------------------------------------------
+# E22 — safe_domain con dígito inicial genera PHP inválido (familia P10)
+# ---------------------------------------------------------------------------
+def test_e22_safe_domain_con_digito_genera_php_valido():
+    """2do.com.ar -> safe_domain '2do_com_ar' -> function 2do_...() (PHP inválido)."""
+    import io
+    import zipfile
+    from analyzer import _generar_soluciones
+
+    base = {
+        "url": "https://2do.com.ar",
+        "scorecard": {"SEO": (5, [])},
+        "forms": {"con_email": 0, "total": 0, "lista": []},
+        "meta": {"title": "2do Sitio", "og_site_name": "2do Sitio", "description": "Descripción de ejemplo"},
+    }
+    meta = {"title": "2do Sitio", "description": "Descripción de ejemplo"}
+    sol = _generar_soluciones(base, "<html></html>", meta, tech=["WordPress"])
+    zip_sol = next(s for s in sol if s["nombre"].endswith("optimizer.zip"))
+    with zipfile.ZipFile(io.BytesIO(zip_sol["contenido"])) as zf:
+        code = zf.read(zf.namelist()[0]).decode("utf-8")
+    assert not re.search(r"function\s+\d", code), (
+        "safe_domain con dígito inicial genera function 2do_...() (PHP inválido, E22)"
+    )
+    funcs = re.findall(r"function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", code)
+    assert funcs, "no se encontraron funciones en el plugin generado"
+    assert _php_braces_balanced(code), "llaves desbalanceadas (PHP inválido)"

@@ -67,7 +67,7 @@ RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 SMTP_HOST = os.environ.get("SMTP_HOST", "a0110133.ferozo.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
 SMTP_USER = os.environ.get("SMTP_USER", "no-reply@webanalyzer.com.ar")
-SMTP_PASS = os.environ.get("SMTP_PASS", "25YmQhbaWJ")
+SMTP_PASS = os.environ.get("SMTP_PASS", "")  # nunca un fallback hardcodeado (E39)
 SMTP_FROM = os.environ.get("SMTP_FROM", "Web Analyzer <no-reply@webanalyzer.com.ar>")
 
 def send_email(to, subject, body):
@@ -99,6 +99,10 @@ def send_email(to, subject, body):
             log.warning(f"Resend error: {e}")
 
     # Fallback: SMTP Ferozo
+    if not SMTP_PASS:
+        log.error("SMTP_PASS no configurado en el entorno — no se puede enviar por SMTP (E39)")
+        return False
+
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart

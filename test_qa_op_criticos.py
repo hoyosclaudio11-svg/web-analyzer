@@ -239,3 +239,25 @@ def test_e14_logout_revoca_el_token(client, tmp_path):
                 del db_mod._local.db
         else:
             db_mod._local.db = orig_local
+
+
+# ---------------------------------------------------------------------------
+# E39 — credenciales SMTP hardcodeadas en el repo (robo de secretos)
+# ---------------------------------------------------------------------------
+def test_e39_smtp_pass_sin_fallback_hardcodeado():
+    """E39 — SMTP_PASS no debe tener fallback con credencial real en el código."""
+    import re
+    import app as app_mod
+
+    src = open(app_mod.__file__, encoding="utf-8").read()
+    m = re.search(
+        r'SMTP_PASS\s*=\s*os\.environ\.get\(\s*["\']SMTP_PASS["\']\s*,\s*["\']([^"\']*)["\']\s*\)',
+        src,
+    )
+    assert m, "SMTP_PASS no usa os.environ.get con default"
+    assert m.group(1) == "", (
+        f"fallback de SMTP_PASS no vacío (credencial en el repo): {m.group(1)!r} (E39)"
+    )
+    assert "25YmQhbaWJ" not in src, (
+        "la credencial que estaba commiteada sigue en el código (E39)"
+    )
