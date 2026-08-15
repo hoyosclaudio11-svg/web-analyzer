@@ -303,15 +303,25 @@ def api_register():
 @limiter.limit("10 per minute")
 def api_login():
     data = request.get_json(force=True)
-    email = (data.get("email") or "").strip()
+    email = (data.get("email") or "").strip().lower()
     password = (data.get("password") or "").strip()
+    if not email or not password:
+        return jsonify({"error": "Email y contraseña requeridos"}), 400
+    # E15 — lockout por cuenta: N fallos en la ventana bloquean aunque cambie la IP
+    if _cuenta_bloqueada(email):
+        return jsonify({
+            "error": "Demasiados intentos fallidos. Probá de nuevo en 15 minutos.",
+            "code": "ACCOUNT_LOCKED",
+        }), 429
     try:
         user = authenticate(email, password)
     except Exception as e:
         log.exception(f"trace={g.trace_id} Error en autenticación")
         return _error_interno()
     if not user:
+        _registrar_fallo_login(email)
         return jsonify({"error": "Credenciales inválidas"}), 401
+    _limpiar_fallos_login(email)
     track_event("user_logged_in", user["id"])
     return jsonify({
         "email": user["email"],
@@ -611,6 +621,33 @@ def _lead_excede_limite(ip):
     recientes.append(now)
     _LEAD_SENDS[ip] = recientes
     return False
+
+
+# --- E15: lockout por cuenta (independiente de la IP) ---
+_LOGIN_FAILS = {}  # email -> timestamps de fallos (ventana deslizante)
+_LOGIN_MAX_FAILS = 5
+_LOGIN_WINDOW_SEC = 15 * 60
+
+
+def _cuenta_bloqueada(email):
+    """True si la cuenta acumuló >= 5 fallos en los últimos 15 min (E15).
+
+    El rate limit por IP (@limiter) no frena fuerza bruta distribuida;
+    este lockout es por email y vale aunque cambie la IP.
+    """
+    ahora = time.time()
+    ventana = ahora - _LOGIN_WINDOW_SEC
+    fails = [t for t in _LOGIN_FAILS.get(email, []) if t >= ventana]
+    _LOGIN_FAILS[email] = fails
+    return len(fails) >= _LOGIN_MAX_FAILS
+
+
+def _registrar_fallo_login(email):
+    _LOGIN_FAILS.setdefault(email, []).append(time.time())
+
+
+def _limpiar_fallos_login(email):
+    _LOGIN_FAILS.pop(email, None)
 
 
 @app.route("/api/lead", methods=["POST"])

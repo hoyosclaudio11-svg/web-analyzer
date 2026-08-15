@@ -294,3 +294,34 @@ def test_a40_analizar_reporta_loop_de_redirects():
     assert any("redirect" in e.lower() for e in resultado["errores"]), (
         "el usuario recibe un scorecard en vez del aviso de loop de redirects (A40)"
     )
+
+
+# ---------------------------------------------------------------------------
+# A16 — hero con loading="eager"/fetchpriority="high" NO es "imagen sin lazy"
+# ---------------------------------------------------------------------------
+def test_a16_hero_eager_no_penaliza_sin_lazy():
+    """El hero (LCP) no debe ser lazy: eager/fetchpriority=high no cuenta en sin_lazy."""
+    html = """
+    <html><body>
+      <img src="https://s.com/hero.jpg" loading="eager" fetchpriority="high" alt="Hero">
+      <img src="https://s.com/img2.jpg" alt="Sin lazy, candidata">
+      <img src="https://s.com/img3.jpg" loading="lazy" alt="Con lazy">
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    data = _extraer_imagenes(soup, "https://s.com/")
+    assert data["sin_lazy"] == 1, (
+        f"hero con eager/fetchpriority penalizado como sin lazy (A16): {data['sin_lazy']}"
+    )
+
+
+def test_a16_img_sin_loading_sigue_contando_como_sin_lazy():
+    """Imagen sin atributo loading (no hero) sigue siendo candidata a lazy."""
+    soup = BeautifulSoup(
+        '<html><body><img src="https://s.com/x.jpg" alt="X"></body></html>',
+        "html.parser",
+    )
+    data = _extraer_imagenes(soup, "https://s.com/")
+    assert data["sin_lazy"] == 1, (
+        "imagen sin loading dejó de contarse como sin lazy (sobre-corrección A16)"
+    )

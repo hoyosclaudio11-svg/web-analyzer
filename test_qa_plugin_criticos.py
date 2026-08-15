@@ -362,3 +362,39 @@ def test_e22_safe_domain_con_digito_genera_php_valido():
     funcs = re.findall(r"function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", code)
     assert funcs, "no se encontraron funciones en el plugin generado"
     assert _php_braces_balanced(code), "llaves desbalanceadas (PHP inválido)"
+
+
+# ---------------------------------------------------------------------------
+# B19 — document.write inline: el defer global se desactiva (página vaciada)
+# ---------------------------------------------------------------------------
+def test_b19_document_write_inline_desactiva_defer():
+    """HTML con document.write inline -> el plugin NO agrega defer global (B19)."""
+    import io
+    import zipfile
+    from analyzer import _generar_soluciones
+
+    base = {
+        "url": "https://mi-sitio.com.ar",
+        "scorecard": {"SEO": (5, [])},
+        "forms": {"con_email": 0, "total": 0, "lista": []},
+        "meta": {"title": "Mi Sitio", "og_site_name": "Mi Sitio", "description": "Descripción"},
+    }
+    meta = {"title": "Mi Sitio", "description": "Descripción"}
+
+    def _code(html):
+        sol = _generar_soluciones(base, html, meta, tech=["WordPress"])
+        zip_sol = next(s for s in sol if s["nombre"].endswith("optimizer.zip"))
+        with zipfile.ZipFile(io.BytesIO(zip_sol["contenido"])) as zf:
+            return zf.read(zf.namelist()[0]).decode("utf-8")
+
+    html_con_dw = r"<html><head><script>document.write('<script src=\"lib.js\"><\/script>');</script></head><body><h1>H</h1></body></html>"
+    code = _code(html_con_dw)
+    assert "script_loader_tag" not in code, (
+        "defer aplicado pese a document.write inline: página vaciada en algunos browsers (B19)"
+    )
+
+    # Control: sin document.write el defer sigue generándose (B25 intacto)
+    code_ok = _code("<html><body><img src='x.jpg' alt='X'></body></html>")
+    assert "script_loader_tag" in code_ok, (
+        "el defer dejó de generarse para sitios sin document.write (sobre-corrección B19)"
+    )

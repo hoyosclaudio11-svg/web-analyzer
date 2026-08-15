@@ -261,3 +261,40 @@ def test_e39_smtp_pass_sin_fallback_hardcodeado():
     assert "25YmQhbaWJ" not in src, (
         "la credencial que estaba commiteada sigue en el código (E39)"
     )
+
+
+# ---------------------------------------------------------------------------
+# E15 — lockout por cuenta tras N fallos (independiente de la IP)
+# ---------------------------------------------------------------------------
+def test_e15_lockout_por_cuenta_independiente_de_ip(client, tmp_path):
+    """5 fallos de login bloquean la cuenta aunque la IP cambie (E15)."""
+    mod = client.app_module
+    mod._LOGIN_FAILS.clear()
+    mod.limiter.reset()
+    import database as db_mod
+
+    orig_path = db_mod.DB_PATH
+    orig_local = getattr(db_mod._local, "db", None)
+    db_mod.DB_PATH = tmp_path / "test.db"
+    if hasattr(db_mod._local, "db"):
+        del db_mod._local.db
+    try:
+        db_mod.init_db()
+        client.post("/api/auth/register", json={"email": "lock@x.com", "password": "pass1234"})
+        for _ in range(5):
+            r = client.post("/api/auth/login", json={"email": "lock@x.com", "password": "mala"})
+            assert r.status_code == 401
+        # 6to intento con la password CORRECTA -> la cuenta está bloqueada (429)
+        r = client.post("/api/auth/login", json={"email": "lock@x.com", "password": "pass1234"})
+        assert r.status_code == 429, (
+            "la cuenta no se bloquea tras 5 fallos aunque la password sea correcta (E15)"
+        )
+        assert (r.get_json() or {}).get("code") == "ACCOUNT_LOCKED"
+    finally:
+        mod._LOGIN_FAILS.clear()
+        db_mod.DB_PATH = orig_path
+        if orig_local is None:
+            if hasattr(db_mod._local, "db"):
+                del db_mod._local.db
+        else:
+            db_mod._local.db = orig_local

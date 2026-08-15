@@ -422,13 +422,20 @@ def _extraer_imagenes(soup, base_url):
             "width": img.get("width", ""),
             "height": img.get("height", ""),
             "loading": img.get("loading", ""),
+            "fetchpriority": img.get("fetchpriority", ""),
             "format": _formato_imagen(src),
         })
     return {
         "total": len(imgs),
         # alt="" es decorativo y válido WCAG; solo cuenta la ausencia del atributo
         "sin_alt": sum(1 for i in imgs if not i["tiene_alt"]),
-        "sin_lazy": sum(1 for i in imgs if i["loading"] != "lazy"),
+        # El hero (LCP) NO debe ser lazy: loading="eager" explícito o
+        # fetchpriority="high" no cuenta como "sin lazy" (A16)
+        "sin_lazy": sum(
+            1 for i in imgs
+            if i["loading"] != "lazy"
+            and not (i["loading"] == "eager" or (i["fetchpriority"] or "").lower() == "high")
+        ),
         "formatos": list(set(i["format"] for i in imgs if i["format"])),
         "lista": imgs[:20],
     }
@@ -1080,7 +1087,9 @@ Agregar en el `<head>`:
     # --- Solucion 2: Plugin WordPress ZIP (solo si el sitio ES WordPress) ---
     es_wordpress = any("WordPress" in t for t in tech)
     if es_wordpress:
-        plugin_code = _generar_plugin_wordpress(resultado, safe_domain)
+        # B19 — document.write inline: el defer global se desactiva (página vaciada)
+        hay_document_write = bool(re.search(r"document\.write\s*\(", html, re.I))
+        plugin_code = _generar_plugin_wordpress(resultado, safe_domain, hay_document_write)
         plugin_zip = _crear_zip_plugin(safe_domain, plugin_code)
         soluciones.append({
             "nombre": f"{safe_domain}_optimizer.zip",
@@ -1165,7 +1174,7 @@ def _rubro_sensible(resultado):
     return any(kw in texto for kw in _RUBROS_SENSIBLES_KEYWORDS)
 
 
-def _generar_plugin_wordpress(resultado, safe_domain):
+def _generar_plugin_wordpress(resultado, safe_domain, hay_document_write=False):
     """Genera un plugin WordPress con todas las correcciones."""
     site_name = _php_safe(resultado["meta"].get("og_site_name") or resultado["meta"].get("title") or safe_domain)
     site_desc = resultado["meta"].get("description") or ""
@@ -1193,6 +1202,31 @@ add_action('wp_footer', '{safe_domain}_trust_bar');
 """
         if (not con_email and not rubro_sensible) else ""
     )
+
+    # B19 — document.write inline + defer = página vaciada en algunos browsers:
+    # si el sitio usa document.write, desactivar el defer global (no emitir filtro).
+    if hay_document_write:
+        defer_block = ""
+    else:
+        defer_block = f"""// 6. DEFER EN SCRIPTS EXTERNOS (reduce bloqueantes sin romper jQuery)
+function {safe_domain}_defer_scripts($tag, $handle, $src) {{
+    if (is_admin() || !$src) return $tag;
+    if (strpos($handle, 'jquery') === 0 || strpos($handle, 'jquery-ui') !== false) return $tag;
+    // B25 — widgets de chat/CRM que dependen del orden o usan document.write
+    // (Tawk.to, Crisp, HubSpot, Intercom, Zendesk, LiveChat, Tidio):
+    // excluirlos del defer o el widget desaparece/rompe el layout.
+    $excluidos = array('tawk', 'tawkto', 'crisp', 'hubspot', 'hs-scripts', 'intercom', 'zendesk', 'livechat', 'tidio');
+    foreach ($excluidos as $prefijo) {{
+        if (strpos($handle, $prefijo) !== false) return $tag;
+    }}
+    $dominios_excluidos = array('tawk.to', 'crisp.chat', 'hubspot', 'hsstatic.net', 'hsforms.net', 'intercomcdn.com', 'zendesk.com', 'livechatinc.com', 'tidiochat.com');
+    foreach ($dominios_excluidos as $dom) {{
+        if (strpos($src, $dom) !== false) return $tag;
+    }}
+    return str_replace(' src=', ' defer src=', $tag);
+}}
+add_filter('script_loader_tag', '{safe_domain}_defer_scripts', 10, 3);
+"""
 
     return f"""<?php
 /**
@@ -1451,25 +1485,7 @@ function {safe_domain}_optimize_output($html) {{
 add_action('template_redirect', '{safe_domain}_buffer_start');
 add_action('shutdown', function() {{ if (ob_get_level()) ob_end_flush(); }});
 
-// 6. DEFER EN SCRIPTS EXTERNOS (reduce bloqueantes sin romper jQuery)
-function {safe_domain}_defer_scripts($tag, $handle, $src) {{
-    if (is_admin() || !$src) return $tag;
-    if (strpos($handle, 'jquery') === 0 || strpos($handle, 'jquery-ui') !== false) return $tag;
-    // B25 — widgets de chat/CRM que dependen del orden o usan document.write
-    // (Tawk.to, Crisp, HubSpot, Intercom, Zendesk, LiveChat, Tidio):
-    // excluirlos del defer o el widget desaparece/rompe el layout.
-    $excluidos = array('tawk', 'tawkto', 'crisp', 'hubspot', 'hs-scripts', 'intercom', 'zendesk', 'livechat', 'tidio');
-    foreach ($excluidos as $prefijo) {{
-        if (strpos($handle, $prefijo) !== false) return $tag;
-    }}
-    $dominios_excluidos = array('tawk.to', 'crisp.chat', 'hubspot', 'hsstatic.net', 'hsforms.net', 'intercomcdn.com', 'zendesk.com', 'livechatinc.com', 'tidiochat.com');
-    foreach ($dominios_excluidos as $dom) {{
-        if (strpos($src, $dom) !== false) return $tag;
-    }}
-    return str_replace(' src=', ' defer src=', $tag);
-}}
-add_filter('script_loader_tag', '{safe_domain}_defer_scripts', 10, 3);
-{cta_block}
+{defer_block}{cta_block}
 
 // == SOPORTE ==
 // ¿Problemas? Escribinos a soporte@delmonteanalitica.com
