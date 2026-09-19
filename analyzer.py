@@ -15,6 +15,7 @@ from datetime import datetime
 from urllib.parse import urljoin, urlparse, urlunparse, urlencode
 
 import requests
+from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
 
 # =============================================================================
@@ -125,6 +126,33 @@ def _url_con_ip(url, ip_str):
     return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
 
 
+class _AdaptadorPinneado(HTTPAdapter):
+    """Conecta a la IP validada pero valida el certificado contra el hostname real.
+
+    Sin esto el pinning rompe todo HTTPS: la conexión va a la IP, así que TLS
+    verifica el certificado contra la IP («IP address mismatch») y ningún sitio
+    con certificado normal se puede auditar. Se le pasa a urllib3 el hostname
+    original para el SNI y para la verificación (`assert_hostname`), así el
+    pinning anti-SSRF se mantiene y el certificado se sigue exigiendo.
+    """
+
+    def __init__(self, hostname, **kwargs):
+        self._hostname = hostname
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        pool_kwargs["assert_hostname"] = self._hostname
+        pool_kwargs["server_hostname"] = self._hostname
+        return super().init_poolmanager(connections, maxsize, block, **pool_kwargs)
+
+
+def _sesion_pinneada(hostname):
+    """Sesión de requests que pinnea la IP y verifica el certificado del hostname."""
+    session = requests.Session()
+    session.mount("https://", _AdaptadorPinneado(hostname))
+    return session
+
+
 _MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # 10 MB — anti gzip-bomb / páginas gigantes
 
 
@@ -194,7 +222,6 @@ def _safe_get(url, timeout=15):
     }
     try:
         # Seguimos redirects manualmente para validar cada destino (anti-SSRF)
-        session = requests.Session()
         current = url
         hops = 0
         while True:
@@ -203,6 +230,10 @@ def _safe_get(url, timeout=15):
                 raise ValueError(f"URL bloqueada: {reason}")
             # Pinning: conectar a la IP ya validada (no re-resolver — DNS rebinding)
             pinned_url = _url_con_ip(current, ip_str)
+            # La sesión se arma en cada salto: el hostname del destino es el que
+            # vale para el SNI y para verificar el certificado (ver _AdaptadorPinneado).
+            hostname = urlparse(current).hostname or ""
+            session = _sesion_pinneada(hostname)
             hop_headers = dict(headers)
             hop_headers["Host"] = urlparse(current).netloc
             resp = session.get(pinned_url, headers=hop_headers, timeout=timeout, allow_redirects=False)
@@ -237,6 +268,10 @@ def _safe_get(url, timeout=15):
             clen = 0
         if clen > _MAX_RESPONSE_BYTES:
             raise ValueError(f"Respuesta demasiado grande ({clen} bytes)")
+        # La URL de la respuesta no debe ser la IP pinneada: se reporta, se guarda
+        # en el historial y alimenta el plugin y PageSpeed Insights. Dejarla con la
+        # IP generaba informes y plugins apuntando a la IP en vez del dominio.
+        resp.url = current
         return resp
     except requests.Timeout:
         raise ValueError(f"Timeout al acceder a {url} — el servidor no respondió en {timeout}s")
