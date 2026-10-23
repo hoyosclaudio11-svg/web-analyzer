@@ -19,4 +19,5 @@ Después del despliegue de staging, repetir esta misma comprobación pasiva y co
 - `web-analyzer-1-l8uc.onrender.com` responde 200 en `/` y `/api/health`, pero las respuestas observadas no incluyen HSTS ni CSP.
 - `webanalyzer.com.ar` sirve un proyecto Next.js en Vercel; su respuesta incluye HSTS, pero no CSP.
 - La inspección de Vercel mostró `gitSource: null`. El repositorio local y los repositorios accesibles de GitHub contienen el backend Flask, pero no el código fuente Next.js de ese proyecto.
+- El bundle público del formulario principal envía `POST /api/audits` al mismo dominio con `{url}` y espera un `id`. Este backend Flask expone `POST /api/analyze`; no se pudo inspeccionar la implementación de `/api/audits` para confirmar si hoy reenvía al servicio Flask.
 - Por eso, desplegar este branch solo actualizaría el backend Flask. La integración visible en el dominio principal requiere localizar el código Next.js y verificar cómo conecta hoy con el backend.

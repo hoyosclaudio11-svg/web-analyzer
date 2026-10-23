@@ -466,7 +466,7 @@ function renderSecurityAudit(data, versions) {
   const body = $('#seguridad-body');
   if (!body) return;
   if (!data || data.enabled !== true) {
-    body.innerHTML = '<p class="empty-text">El módulo de seguridad pasiva está desactivado en este entorno. No forma parte del puntaje hasta habilitarse en staging.</p>';
+    body.innerHTML = '<p class="empty-text">No se ejecutó el chequeo pasivo de HTTPS y cabeceras para esta página.</p>';
     return;
   }
   const controls = data && Array.isArray(data.controles) ? data.controles : [];

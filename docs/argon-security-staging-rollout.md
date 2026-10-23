@@ -6,7 +6,7 @@ El backend entrega las auditorías ampliadas de Lighthouse y una matriz de cober
 
 ## Alcance de esta rama
 
-Esta rama actualiza el servicio Flask de Render. El dominio principal `webanalyzer.com.ar` usa un proyecto Next.js de Vercel separado; la inspección de producción mostró que ese proyecto no está enlazado a un repositorio Git y su código no está en los repositorios locales disponibles. No se debe atribuir a este despliegue de Flask un cambio visible en la interfaz Next.js hasta localizar e integrar ese código.
+Esta rama actualiza el servicio Flask de Render. El dominio principal `webanalyzer.com.ar` usa un proyecto Next.js de Vercel separado; su formulario público llama a `POST /api/audits`, mientras que Flask expone `POST /api/analyze`. La inspección de producción mostró que el proyecto Vercel no está enlazado a un repositorio Git y su código no está en los repositorios locales disponibles. Falta revisar la implementación de `/api/audits` para saber si sirve de puente a Flask; no se debe atribuir a este despliegue un cambio visible en la interfaz Next.js hasta verificar e integrar ese flujo.
 
 El catálogo versionado contiene 22 controles. Diez son observables en una respuesta HTTP normal: siete controles de transporte/cabeceras y tres atributos de cookies de sesión. Si la respuesta no emite una cookie de sesión reconocible, esos tres controles aparecen como `not_applicable`.
 
