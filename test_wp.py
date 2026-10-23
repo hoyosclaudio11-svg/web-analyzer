@@ -1,25 +1,38 @@
-﻿import requests, base64
+"""Manual, read-only WordPress credential check.
 
-user = 'a0110133'
-pwd = 'era6 uQQE 0k9i hghY E0iM 2Akn'
-auth = base64.b64encode(f'{user}:{pwd}'.encode()).decode()
+This file is intentionally excluded from pytest's default offline test suite.
+Run it explicitly only when the owner has set the two environment variables.
+"""
 
-# Probar users/me
-r = requests.get('https://webanalyzer.com.ar/web/wp-json/wp/v2/users/me',
-                 headers={'Authorization': f'Basic {auth}'})
-print(f"Status: {r.status_code}")
-print(f"Response: {r.text[:500]}")
+from __future__ import annotations
 
-# Si falla, probar crear un post
-if r.status_code != 200:
-    print("\nProbando crear un post...")
-    data = {
-        'title': 'Test',
-        'content': 'Test content',
-        'status': 'draft'
-    }
-    r2 = requests.post('https://webanalyzer.com.ar/web/wp-json/wp/v2/posts',
-                       headers={'Authorization': f'Basic {auth}'},
-                       json=data)
-    print(f"Status: {r2.status_code}")
-    print(f"Response: {r2.text[:500]}")
+import os
+import sys
+
+import requests
+
+
+def main() -> int:
+    user = os.environ.get("WEBANALYZER_WP_USER")
+    password = os.environ.get("WEBANALYZER_WP_APP_PASSWORD")
+    if not user or not password:
+        print("Set WEBANALYZER_WP_USER and WEBANALYZER_WP_APP_PASSWORD to run this check.", file=sys.stderr)
+        return 2
+
+    try:
+        response = requests.get(
+            "https://webanalyzer.com.ar/web/wp-json/wp/v2/users/me",
+            auth=(user, password),
+            timeout=15,
+            allow_redirects=False,
+        )
+    except requests.RequestException as error:
+        print(f"WordPress check failed: {type(error).__name__}", file=sys.stderr)
+        return 1
+
+    print(f"WordPress credential check: HTTP {response.status_code}")
+    return 0 if response.status_code == 200 else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
