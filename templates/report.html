@@ -50,6 +50,29 @@
 </div>
 {% endfor %}
 
+{% if report.metadata %}
+{% set security = report.metadata.get("seguridad", {}) %}
+{% if security.get("enabled") %}
+{% set coverage = security.get("resumen", {}) %}
+<div class="footer" style="margin-top:18px">
+  {{ security.get("metodologia", "Índice Argon de seguridad web") }}:
+  {{ security.get("puntaje", "—") }}/10 &middot;
+  Cobertura {{ coverage.get("evaluados", 0) }}/{{ coverage.get("catalogo_total", 0) }} controles
+  ({{ coverage.get("cobertura_porcentaje", 0) }}%) &middot;
+  {{ coverage.get("aprobados", 0) }} correctos &middot;
+  {{ coverage.get("observaciones", 0) }} observaciones &middot;
+  {{ coverage.get("no_evaluados", 0) }} no evaluados &middot;
+  Catálogo {{ security.get("catalogo_version", "sin versión") }}
+</div>
+{% endif %}
+<div class="footer" style="margin-top:18px">
+  Motor: {{ report.metadata.get("motor", "versión anterior no registrada") }}
+  {% if report.metadata.get("perfil_seguridad") %}
+  &middot; Perfil de seguridad: {{ report.metadata.get("perfil_seguridad") }}
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="footer">
   Generado por <a href="/">Web Analyzer &amp; Optimizer</a> &middot; {{ report.views }} vistas
 </div>

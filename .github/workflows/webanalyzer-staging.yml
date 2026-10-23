@@ -1,0 +1,36 @@
+name: WebAnalyzer staging checks
+
+on:
+  push:
+    branches:
+      - codex/argon-staging-20261023
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt pytest
+      - name: Run WebAnalyzer checks
+        run: >-
+          python -m pytest
+          test_security_audit.py test_practice_coverage.py test_security_rollout.py
+          test_ssrf_hardening.py test_analyzer.py test_qa_analyzer_criticos.py
+          test_app.py test_qa_app_criticos.py -q
+      - name: Compile Python modules
+        run: python -m py_compile analyzer.py app.py security_audit.py practice_coverage.py
+      - name: Check frontend JavaScript syntax
+        run: node --check static/script.js

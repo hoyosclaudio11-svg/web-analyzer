@@ -295,6 +295,9 @@ function renderResults(data) {
   pendingData = data;
   showResults();
   renderScorecard(data.scorecard, data.promedio, data.promedio_color);
+  renderSecurityAudit(data.seguridad, data.versiones);
+  renderPerformanceAudit(data.psi);
+  renderPracticeCoverage(data.cobertura_practicas);
   renderShareLink(data.report_url, data.url_final || data.url, data.promedio);
   // Mostrar solo 2 hallazgos como anticipo
   if (data.hallazgos && data.hallazgos.length) {
@@ -309,7 +312,7 @@ function renderResults(data) {
       }).join('');
   }
   // Ocultar el resto
-  document.querySelectorAll('#recomendaciones-body, #soluciones-body, #next-steps-body, #next-steps-card, #meta-body, #imagenes-body, #scripts-body, #forms-body, .soluciones-card, .tech-bar, .details-grid').forEach(function(el) { if(el) el.style.display = 'none'; });
+  document.querySelectorAll('#recomendaciones-body, #soluciones-body, #next-steps-body, #next-steps-card, #meta-body, #imagenes-body, #scripts-body, #forms-body, #seguridad-body, #lighthouse-body, #practice-coverage-body, .soluciones-card, .tech-bar, .details-grid').forEach(function(el) { if(el) el.style.display = 'none'; });
   // Mostrar modal de email
   showEmailGate();
 }
@@ -342,11 +345,14 @@ function submitEmailGate(email) {
 
 function renderFullResults(data) {
   // Restaurar secciones ocultas
-  document.querySelectorAll('#recomendaciones-body, #soluciones-body, #next-steps-body, #next-steps-card, #meta-body, #imagenes-body, #scripts-body, #forms-body, .soluciones-card, .tech-bar, .details-grid').forEach(function(el) { if(el) el.style.display = ''; });
+  document.querySelectorAll('#recomendaciones-body, #soluciones-body, #next-steps-body, #next-steps-card, #meta-body, #imagenes-body, #scripts-body, #forms-body, #seguridad-body, #lighthouse-body, #practice-coverage-body, .soluciones-card, .tech-bar, .details-grid').forEach(function(el) { if(el) el.style.display = ''; });
   renderNextSteps(data);
   renderTech(data.tecnologia);
   renderHallazgos(data.hallazgos);
   renderRecomendaciones(data.recomendaciones);
+  renderSecurityAudit(data.seguridad, data.versiones);
+  renderPerformanceAudit(data.psi);
+  renderPracticeCoverage(data.cobertura_practicas);
   renderSoluciones(data.soluciones);
   renderMeta(data.meta);
   renderImagenes(data.imagenes);
@@ -433,6 +439,7 @@ function renderScorecard(scorecard, promedio, color) {
     'SEO': 'Meta tags (title, description, OG), canonical, headings semánticos y longitud de títulos.',
     'UX': 'Tiempo de carga, diseño responsive, legibilidad, contraste visual y jerarquía de contenido.',
     'Conversión': 'Formularios de captura de email, CTAs visibles, newsletter y oportunidades de conversión.',
+    'Seguridad': 'Controles HTTPS y cabeceras visibles, evaluados con la metodología de Argon Defender.',
   };
 
   for (const [cat, info] of Object.entries(scorecard)) {
@@ -453,6 +460,99 @@ function renderScorecard(scorecard, promedio, color) {
     <span style="color:var(--text2)">PROMEDIO</span>
     <span class="prom-num ${color}">${promedio}/10</span>
     <span class="${color}" style="font-size:12px">${promedio >= 8 ? 'Listo para monetizar' : promedio >= 5 ? 'Necesita mejoras' : 'Requiere intervención'}</span>`;
+}
+
+function renderSecurityAudit(data, versions) {
+  const body = $('#seguridad-body');
+  if (!body) return;
+  if (!data || data.enabled !== true) {
+    body.innerHTML = '<p class="empty-text">El módulo de seguridad pasiva está desactivado en este entorno. No forma parte del puntaje hasta habilitarse en staging.</p>';
+    return;
+  }
+  const controls = data && Array.isArray(data.controles) ? data.controles : [];
+  if (!controls.length) {
+    body.innerHTML = '<p class="empty-text">No hay datos de seguridad disponibles para esta respuesta.</p>';
+    return;
+  }
+  const summary = data.resumen || {};
+  const statusLabels = { pass: 'Correcto', issue: 'Revisar', not_observed: 'Sin evidencia', not_applicable: 'No aplica', not_evaluated: 'No evaluado' };
+  const severityLabels = { alta: 'Alta', media: 'Media', baja: 'Baja', informativa: 'Informativa' };
+  body.innerHTML = `<p class="audit-method">${esc(data.nombre_metodologia || 'Índice Argon de seguridad web')}. Evidencia pasiva visible en la respuesta de la página.</p>
+    <p class="audit-summary">Cobertura: ${Number(summary.evaluados || 0)}/${Number(summary.catalogo_total || 0)} controles evaluados (${Number(summary.cobertura_porcentaje || 0)}%) · ${Number(summary.aprobados || 0)} correctos · ${Number(summary.observaciones || 0)} observaciones · ${Number(summary.no_evaluados || 0)} requieren otra evidencia · ${Number(summary.no_aplica || 0)} no aplican</p>
+    <p class="audit-method">Motor: ${esc((versions || {}).motor || 'versión no informada')} · Catálogo: ${esc(data.catalogo_version || 'no informado')}</p>
+    ${controls.map(function(c) {
+      const severity = c.estado === 'issue' ? ` · ${esc(severityLabels[c.gravedad] || 'Informativa')}` : '';
+      const recommendation = (c.estado === 'issue' || c.estado === 'not_evaluated') && c.recomendacion
+        ? `<small>${esc(c.recomendacion)}</small>`
+        : '';
+      return `<div class="audit-row audit-${esc(c.estado)}">
+        <div class="audit-row-title"><strong>${esc(c.titulo)}</strong><span>${esc(statusLabels[c.estado] || 'Sin evaluar')}${severity}</span></div>
+        <div>${esc(c.evidencia || '')}</div>
+        ${recommendation}
+      </div>`;
+    }).join('')}
+    <p class="audit-limits">${(data.limites || []).map(esc).join(' ')}</p>`;
+}
+
+function renderPerformanceAudit(data) {
+  const body = $('#lighthouse-body');
+  if (!body) return;
+  if (!data) {
+    body.innerHTML = '<p class="empty-text">No se obtuvieron datos de PageSpeed Insights para esta página.</p>';
+    return;
+  }
+  const audits = Array.isArray(data.auditorias) ? data.auditorias : [];
+  const field = data.datos_campo_url || data.datos_campo_origen;
+  const metrics = field && field.metricas ? field.metricas : {};
+  const metricNames = {
+    LARGEST_CONTENTFUL_PAINT_MS: 'LCP (ms)',
+    FIRST_CONTENTFUL_PAINT_MS: 'FCP (ms)',
+    INTERACTION_TO_NEXT_PAINT: 'INP (ms)',
+    CUMULATIVE_LAYOUT_SHIFT_SCORE: 'CLS',
+    EXPERIMENTAL_TIME_TO_FIRST_BYTE: 'TTFB (ms)',
+  };
+  const metricMarkup = Object.entries(metrics).map(function(entry) {
+    return `<span class="field-metric">${esc(metricNames[entry[0]] || entry[0])}: p75 ${esc(entry[1].p75)} (${esc(entry[1].nivel || 'sin clasificación')})</span>`;
+  }).join('');
+  const rows = audits.length ? audits.map(function(a) {
+    const label = a.estado === 'issue' ? 'Oportunidad' : a.estado === 'pass' ? 'Correcto' : 'No aplica';
+    return `<div class="audit-row audit-${a.estado === 'issue' ? 'issue' : 'pass'}">
+      <div class="audit-row-title"><strong>${esc(a.titulo)}</strong><span>${label}</span></div>
+      ${a.valor ? `<div>${esc(a.valor)}</div>` : ''}
+      ${a.estado === 'issue' ? `<div>${esc(a.descripcion || '')}</div>` : ''}
+    </div>`;
+  }).join('') : '<p class="empty-text">Lighthouse no informó oportunidades en las auditorías incluidas.</p>';
+  body.innerHTML = `<p class="audit-method">Lighthouse móvil: ${esc(data.performance_score)}/10. Auditorías de imágenes, JS/CSS, caché, compresión, tamaño del DOM y Core Web Vitals.</p>
+    ${metricMarkup ? `<div class="field-metrics"><strong>Datos de campo de CrUX:</strong> ${metricMarkup}</div>` : '<p class="empty-text">PageSpeed no encontró suficientes datos de campo de CrUX para esta URL ni para el origen.</p>'}
+    ${rows}`;
+}
+
+function renderPracticeCoverage(items) {
+  const body = $('#practice-coverage-body');
+  if (!body) return;
+  if (!Array.isArray(items) || !items.length) {
+    body.innerHTML = '<p class="empty-text">No se recibió la matriz de cobertura.</p>';
+    return;
+  }
+  const labels = {
+    medido: 'Medido',
+    medido_con_hallazgos: 'Medido · revisar',
+    indicio: 'Indicio HTTP',
+    requiere_navegador: 'Requiere prueba de navegador',
+    requiere_servidor: 'Requiere integración de servidor',
+    sin_evidencia: 'Sin evidencia',
+    proceso_interno: 'Control interno del analizador',
+  };
+  const measured = items.filter(function(item) { return item.estado === 'medido' || item.estado === 'medido_con_hallazgos'; }).length;
+  const siteControls = items.filter(function(item) { return item.estado !== 'proceso_interno'; }).length;
+  const indications = items.filter(function(item) { return item.estado === 'indicio'; }).length;
+  body.innerHTML = `<p class="audit-summary">${measured}/${siteControls} prácticas del sitio medidas directamente · ${indications} indicios HTTP · ${items.filter(function(item) { return item.estado === 'requiere_navegador'; }).length} requieren navegador · ${items.filter(function(item) { return item.estado === 'requiere_servidor'; }).length} requieren datos del servidor</p>` + items.map(function(item) {
+    return `<div class="practice-row">
+      <div class="audit-row-title"><strong>${Number(item.id)}. ${esc(item.nombre)}</strong><span>${esc(labels[item.estado] || 'Sin evaluar')}</span></div>
+      <div>${esc(item.evidencia || '')}</div>
+      <small>${esc(item.requiere || '')}</small>
+    </div>`;
+  }).join('');
 }
 
 function renderShareLink(reportUrl, url, promedio) {
