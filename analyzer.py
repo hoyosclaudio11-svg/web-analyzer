@@ -17,12 +17,32 @@ from urllib.parse import urljoin, urlparse, urlunparse, urlencode
 import requests
 from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
+from security_audit import (
+    CATALOG_VERSION as SECURITY_CATALOG_VERSION,
+    METHODOLOGY_ID,
+    METHODOLOGY_NAME,
+    audit_response,
+)
+from practice_coverage import build_practice_coverage
 
 # =============================================================================
 # Constantes de evaluación
 # =============================================================================
 
 CATEGORIAS = ["Rendimiento", "Accesibilidad", "SEO", "UX", "Conversión"]
+ENGINE_VERSION = "webanalyzer-engine-2.0.0"
+_IDENTIFIABLE_USER_AGENT = "WebAnalyzer/2.0 (+https://webanalyzer.com.ar/)"
+
+LIGHTHOUSE_AUDIT_IDS = (
+    "uses-optimized-images", "modern-image-formats", "uses-responsive-images",
+    "offscreen-images", "render-blocking-resources", "unused-javascript",
+    "unminified-javascript", "unminified-css", "unused-css-rules",
+    "uses-long-cache-ttl", "uses-text-compression", "total-byte-weight",
+    "dom-size", "bootup-time", "mainthread-work-breakdown",
+    "server-response-time", "largest-contentful-paint",
+    "cumulative-layout-shift", "interaction-to-next-paint",
+    "first-contentful-paint", "speed-index", "total-blocking-time",
+)
 
 HEADINGS = ["h1", "h2", "h3", "h4", "h5", "h6"]
 
@@ -42,11 +62,11 @@ TECH_SIGNATURES = {
 
 
 _PRIVATE_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"}
-_USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0",
-]
+def security_audit_enabled() -> bool:
+    """Security score is opt-in until enabled in the staging environment."""
+    return os.environ.get("ARGON_SECURITY_ENABLED", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
 
 
 def _resolver_ip_publica(url):
@@ -79,10 +99,8 @@ def _resolver_ip_publica(url):
             ip = ipaddress.ip_address(ip_str)
         except ValueError:
             continue
-        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_multicast:
-            return False, f"IP no pública detectada: {ip_str}", None
-        if ip.version == 6 and ip.is_reserved:
-            return False, f"IPv6 reservada detectada: {ip_str}", None
+        if not ip.is_global:
+            return False, f"IP no globalmente enrutable detectada: {ip_str}", None
         if pinned is None:
             pinned = ip_str
 
@@ -214,9 +232,8 @@ def _detectar_waf(resp):
 
 def _safe_get(url, timeout=15):
     """Fetch URL con headers de navegador, protección SSRF y pinning de IP."""
-    import random
     headers = {
-        "User-Agent": random.choice(_USER_AGENTS),
+        "User-Agent": _IDENTIFIABLE_USER_AGENT,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "es-AR,es;q=0.9",
     }
@@ -236,12 +253,19 @@ def _safe_get(url, timeout=15):
             session = _sesion_pinneada(hostname)
             hop_headers = dict(headers)
             hop_headers["Host"] = urlparse(current).netloc
-            resp = session.get(pinned_url, headers=hop_headers, timeout=timeout, allow_redirects=False)
+            resp = session.get(
+                pinned_url,
+                headers=hop_headers,
+                timeout=timeout,
+                allow_redirects=False,
+                stream=True,
+            )
             if resp.is_redirect and hops < 10:
                 next_url = resp.headers.get("Location", "")
                 if not next_url.startswith(("http://", "https://")):
                     # URL relativa — la resolvemos contra la actual
                     next_url = urljoin(current, next_url)
+                resp.close()
                 current = next_url
                 hops += 1
                 continue
@@ -250,9 +274,11 @@ def _safe_get(url, timeout=15):
         # devolvería un scorecard del redirect (A40). raise_for_status() no
         # cubre 3xx, así que lo detectamos explícitamente.
         if resp.is_redirect or resp.status_code in (301, 302, 303, 307, 308):
+            resp.close()
             raise ValueError(
                 f"Demasiados redirects al acceder a {url} — se detuvo tras {hops} saltos"
             )
+        _leer_respuesta_limitada(resp)
         # WAF/anti-bot (Cloudflare/DataDome/Imperva): el HTML del challenge no
         # es el sitio real — abortar con mensaje claro, no auditar basura (A3)
         waf = _detectar_waf(resp)
@@ -261,13 +287,6 @@ def _safe_get(url, timeout=15):
                 f"El sitio está protegido por un WAF/anti-bot ({waf}) — no se pudo auditar"
             )
         resp.raise_for_status()
-        # Límite de tamaño (Content-Length) — rechaza antes de descargar
-        try:
-            clen = int(resp.headers.get("Content-Length") or 0)
-        except (TypeError, ValueError):
-            clen = 0
-        if clen > _MAX_RESPONSE_BYTES:
-            raise ValueError(f"Respuesta demasiado grande ({clen} bytes)")
         # La URL de la respuesta no debe ser la IP pinneada: se reporta, se guarda
         # en el historial y alimenta el plugin y PageSpeed Insights. Dejarla con la
         # IP generaba informes y plugins apuntando a la IP en vez del dominio.
@@ -277,6 +296,43 @@ def _safe_get(url, timeout=15):
         raise ValueError(f"Timeout al acceder a {url} — el servidor no respondió en {timeout}s")
     except requests.ConnectionError as e:
         raise ValueError(f"No se pudo conectar a {url} — verificá que la URL sea correcta")
+
+
+def _leer_respuesta_limitada(resp):
+    """Consume hasta 10 MB descomprimidos y conserva la interfaz de requests.Response."""
+    try:
+        content_length = int(resp.headers.get("Content-Length") or 0)
+    except (TypeError, ValueError):
+        content_length = 0
+    if content_length > _MAX_RESPONSE_BYTES:
+        resp.close()
+        raise ValueError(f"Respuesta demasiado grande ({content_length} bytes)")
+
+    chunks = []
+    total = 0
+    try:
+        iterator = iter(resp.iter_content(chunk_size=64 * 1024))
+    except (AttributeError, TypeError):
+        # Compatibilidad con adaptadores mínimos y respuestas mockeadas.
+        body = resp.content
+        if not isinstance(body, (bytes, bytearray)):
+            text_body = resp.text
+            body = text_body.encode("utf-8") if isinstance(text_body, str) else b""
+        iterator = iter((bytes(body),))
+
+    for chunk in iterator:
+        if not chunk:
+            continue
+        total += len(chunk)
+        if total > _MAX_RESPONSE_BYTES:
+            resp.close()
+            raise ValueError(f"Respuesta demasiado grande (más de {_MAX_RESPONSE_BYTES} bytes)")
+        chunks.append(chunk)
+
+    # requests decodifica gzip/br en iter_content; conservar los bytes decodificados
+    # evita releer la red cuando analyzer consulta resp.text.
+    resp._content = b"".join(chunks)
+    resp._content_consumed = True
 
 
 def _score_color(score):
@@ -307,6 +363,10 @@ def analizar(url, user_id=None):
     resultado = {
         "url": url,
         "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "versiones": {
+            "motor": ENGINE_VERSION,
+            "perfil_seguridad": SECURITY_CATALOG_VERSION if security_audit_enabled() else None,
+        },
         "scorecard": {},
         "hallazgos": [],
         "recomendaciones": [],
@@ -358,16 +418,46 @@ def analizar(url, user_id=None):
     resultado["scripts"] = scripts
     resultado["enlaces"] = enlaces
     resultado["size_kb"] = round(size_kb, 1)
+    security_enabled = security_audit_enabled()
+    resultado["seguridad"] = (
+        {"enabled": True, **audit_response(
+            resp.url,
+            getattr(resp, "headers", {}),
+            getattr(getattr(resp, "raw", None), "headers", None),
+        )}
+        if security_enabled else {
+            "enabled": False,
+            "metodologia": METHODOLOGY_ID,
+            "nombre_metodologia": METHODOLOGY_NAME,
+            "catalogo_version": SECURITY_CATALOG_VERSION,
+            "puntaje": None,
+            "controles": [],
+            "resumen": {},
+            "limites": ["Este módulo permanece desactivado fuera del entorno habilitado para staging."],
+        }
+    )
 
     # --- Evaluación ---
     psi_data = _fetch_pagespeed_insights(resp.url)  # usar URL final (con redirects)
     resultado["psi"] = psi_data
+    resultado["auditorias_rendimiento"] = (psi_data or {}).get("auditorias", [])
+    resultado["cobertura_practicas"] = build_practice_coverage(
+        imagenes, scripts, psi_data, getattr(resp, "headers", {})
+    )
+    practice_items = resultado["cobertura_practicas"]
+    direct_states = {"medido", "medido_con_hallazgos"}
+    resultado["cobertura_practicas_resumen"] = {
+        "controles_sitio": sum(item["estado"] != "proceso_interno" for item in practice_items),
+        "medidos_directamente": sum(item["estado"] in direct_states for item in practice_items),
+        "indicios": sum(item["estado"] == "indicio" for item in practice_items),
+        "requieren_navegador": sum(item["estado"] == "requiere_navegador" for item in practice_items),
+        "requieren_servidor": sum(item["estado"] == "requiere_servidor" for item in practice_items),
+    }
     score_rendimiento = _evaluar_rendimiento(imagenes, scripts, size_kb, psi_data)
     score_accesibilidad = _evaluar_accesibilidad(imagenes, headings_data, forms, soup)
     score_seo = _evaluar_seo(meta, headings_data, soup)
     score_ux = _evaluar_ux(meta, headings_data, enlaces, soup)
     score_conversion = _evaluar_conversion(forms, enlaces, soup)
-
     resultado["scorecard"] = {
         "Rendimiento": score_rendimiento,
         "Accesibilidad": score_accesibilidad,
@@ -375,12 +465,49 @@ def analizar(url, user_id=None):
         "UX": score_ux,
         "Conversión": score_conversion,
     }
+    if security_enabled:
+        seguridad_resumen = resultado["seguridad"]["resumen"]
+        resultado["scorecard"]["Seguridad"] = (
+            resultado["seguridad"]["puntaje"],
+            [
+                f"{seguridad_resumen['evaluados']} de {seguridad_resumen['catalogo_total']} controles evaluados; "
+                f"{seguridad_resumen['aprobados']} aprobados; {seguridad_resumen['observaciones']} observaciones.",
+                METHODOLOGY_NAME + ": controles pasivos visibles en la respuesta HTTP.",
+            ],
+        )
 
     # --- Hallazgos ---
     resultado["hallazgos"] = _generar_hallazgos(resultado)
+    for control in resultado["seguridad"]["controles"]:
+        if control["estado"] == "issue":
+            resultado["hallazgos"].append({
+                "categoria": "Seguridad",
+                "gravedad": "alta" if control["gravedad"] == "alta" else "media",
+                "problema": control["titulo"],
+                "evidencia": control["evidencia"],
+                "impacto": "Endurecimiento de la respuesta HTTP y protección en el navegador",
+            })
+    for audit in resultado["auditorias_rendimiento"]:
+        if audit["estado"] == "issue":
+            resultado["hallazgos"].append({
+                "categoria": "Rendimiento",
+                "gravedad": "media",
+                "problema": audit["titulo"],
+                "evidencia": audit.get("valor") or audit.get("descripcion", ""),
+                "impacto": "Rendimiento medido por Lighthouse en la página analizada",
+            })
 
     # --- Recomendaciones ---
     resultado["recomendaciones"] = _generar_recomendaciones(resultado)
+    for control in resultado["seguridad"]["controles"]:
+        if control["estado"] == "issue" and control["recomendacion"]:
+            resultado["recomendaciones"].append({
+                "categoria": "Seguridad",
+                "titulo": control["titulo"],
+                "problema": control["evidencia"],
+                "solucion": control["recomendacion"],
+                "esfuerzo": "Medio",
+            })
 
     # --- Soluciones (archivos) ---
     resultado["soluciones"] = _generar_soluciones(resultado, html, meta, tech)
@@ -706,13 +833,52 @@ def _fetch_pagespeed_insights(url: str) -> dict | None:
         api_url += f"&key={api_key}"
     try:
         resp = requests.get(api_url, timeout=20, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; WebAnalyzer/1.0)"
+            "User-Agent": _IDENTIFIABLE_USER_AGENT
         })
         if resp.status_code != 200:
             return None
         data = resp.json()
         lighthouse = data.get("lighthouseResult", {})
         audits = lighthouse.get("audits", {})
+        lighthouse_audits = []
+        for audit_id in LIGHTHOUSE_AUDIT_IDS:
+            audit = audits.get(audit_id)
+            if not isinstance(audit, dict):
+                continue
+            score = audit.get("score")
+            mode = audit.get("scoreDisplayMode", "")
+            if score is None and mode not in {"notApplicable", "manual", "informative"}:
+                continue
+            if mode in {"notApplicable", "manual", "informative"}:
+                state = "not_applicable"
+            else:
+                state = "pass" if float(score) >= 0.9 else "issue"
+            lighthouse_audits.append({
+                "id": audit_id,
+                "titulo": str(audit.get("title") or audit_id)[:180],
+                "descripcion": str(audit.get("description") or "")[:400],
+                "estado": state,
+                "puntaje": score,
+                "valor": str(audit.get("displayValue") or "")[:120],
+                "modo": mode,
+            })
+
+        def field_data(experience):
+            if not isinstance(experience, dict):
+                return None
+            metrics = experience.get("metrics", {})
+            return {
+                "nivel": experience.get("overall_category"),
+                "metricas": {
+                    key: {
+                        "p75": value.get("percentile"),
+                        "nivel": value.get("category"),
+                    }
+                    for key, value in metrics.items()
+                    if isinstance(value, dict)
+                },
+            }
+
         return {
             "performance_score": round(lighthouse.get("categories", {}).get("performance", {}).get("score", 0) * 10, 1),
             "lcp": audits.get("largest-contentful-paint", {}).get("displayValue", "N/A"),
@@ -720,6 +886,10 @@ def _fetch_pagespeed_insights(url: str) -> dict | None:
             "cls": audits.get("cumulative-layout-shift", {}).get("displayValue", "N/A"),
             "fcp": audits.get("first-contentful-paint", {}).get("displayValue", "N/A"),
             "speed_index": audits.get("speed-index", {}).get("displayValue", "N/A"),
+            "inp": audits.get("interaction-to-next-paint", {}).get("displayValue", "N/A"),
+            "auditorias": lighthouse_audits,
+            "datos_campo_url": field_data(data.get("loadingExperience")),
+            "datos_campo_origen": field_data(data.get("originLoadingExperience")),
         }
     except Exception:
         return None

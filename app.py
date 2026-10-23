@@ -3,6 +3,7 @@ Web Analyzer & Optimizer — Backend Flask
 Analiza URLs públicas y genera soluciones descargables.
 """
 import os
+import ipaddress
 from pathlib import Path
 
 # Cargar .env si existe
@@ -52,8 +53,21 @@ CORS(app, resources={r"/*": {"origins": [
     "http://localhost:5100",
 ]}})
 
+
+def _client_ip():
+    """Use Render's client IP only when the trusted-proxy flag is enabled."""
+    if os.environ.get("TRUST_X_FORWARDED_FOR", "").strip().lower() in {"1", "true", "yes", "on"}:
+        forwarded_for = request.headers.get("X-Forwarded-For", "")
+        candidate = forwarded_for.split(",", 1)[0].strip()
+        try:
+            return str(ipaddress.ip_address(candidate))
+        except ValueError:
+            pass
+    return get_remote_address()
+
+
 limiter = Limiter(
-    get_remote_address,
+    _client_ip,
     app=app,
     default_limits=["30 per minute"],
     # E29 — storage configurable por env: memory:// es por proceso (se resetea en
@@ -63,6 +77,14 @@ limiter = Limiter(
 
 API_KEY = os.environ.get("ANALYZER_API_KEY", "")
 DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
+
+
+def _analysis_rate_limit_key():
+    """Limit authenticated scans per account and anonymous scans per source IP."""
+    user = getattr(g, "current_user", None)
+    if user and user.get("id") is not None:
+        return f"user:{user['id']}"
+    return _client_ip()
 
 # --- Email: Resend (primario) + SMTP Ferozo (fallback) ---
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
@@ -256,6 +278,11 @@ def security_headers(response):
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
     if "Referrer-Policy" not in response.headers:
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if "Strict-Transport-Security" not in response.headers:
+        # Do not set includeSubDomains: related services have separate owners/deployments.
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
+    if "Permissions-Policy" not in response.headers:
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     if "Content-Security-Policy" not in response.headers:
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
@@ -298,6 +325,8 @@ def shared_report(report_id):
         report = None
     if not report:
         return render_template("report_404.html"), 404
+    scorecard = report.get("scorecard", {})
+    report["metadata"] = scorecard.pop("_meta", {})
     return render_template("report.html", report=report)
 
 
@@ -441,7 +470,7 @@ def api_feedback():
 
 
 @app.route("/api/analyze", methods=["POST"])
-@limiter.limit("5 per minute")
+@limiter.limit("5 per minute", key_func=_analysis_rate_limit_key)
 def api_analyze():
     data = request.get_json(force=True)
     url = (data.get("url") or "").strip()
@@ -475,10 +504,52 @@ def api_analyze():
 
     # DB operations son best-effort: si fallan, igual devolvemos el análisis
     try:
-        create_shared_report(report_hash, url, {
+        shared_scorecard = {
             k: {"puntaje": s, "color": _color(s), "detalles": d}
             for k, (s, d) in scores.items()
-        }, promedio)
+        }
+        psi = resultado.get("psi")
+        if not isinstance(psi, dict):
+            psi = {}
+        security = resultado.get("seguridad")
+        if not isinstance(security, dict):
+            security = {}
+        coverage_items = resultado.get("cobertura_practicas")
+        if not isinstance(coverage_items, list):
+            coverage_items = []
+        shared_scorecard["_meta"] = {
+            "motor": resultado.get("versiones", {}).get("motor", "unknown"),
+            "perfil_seguridad": resultado.get("versiones", {}).get("perfil_seguridad"),
+            "rendimiento": {
+                "puntaje_lighthouse": psi.get("performance_score"),
+                "metricas": {
+                    name: psi.get(name)
+                    for name in ("lcp", "tbt", "cls", "fcp", "speed_index", "inp")
+                    if psi.get(name) is not None
+                },
+                "datos_campo_url": psi.get("datos_campo_url"),
+                "datos_campo_origen": psi.get("datos_campo_origen"),
+                "auditorias": resultado.get("auditorias_rendimiento") or psi.get("auditorias", []),
+            },
+            "cobertura_practicas": coverage_items,
+            "resumen_cobertura_practicas": resultado.get("cobertura_practicas_resumen") or {},
+            "seguridad": {
+                "enabled": security.get("enabled") is True,
+                "metodologia": security.get("nombre_metodologia"),
+                "puntaje": security.get("puntaje"),
+                "catalogo_version": security.get("catalogo_version"),
+                "resumen": {
+                    key: security.get("resumen", {}).get(key)
+                    for key in (
+                        "evaluados", "catalogo_total", "cobertura_porcentaje",
+                        "aprobados", "observaciones", "no_evaluados", "no_aplica",
+                    )
+                },
+                "controles": security.get("controles", []),
+                "limites": security.get("limites", []),
+            },
+        }
+        create_shared_report(report_hash, url, shared_scorecard, promedio)
 
         if user_id:
             increment_analyses(user_id)
@@ -515,6 +586,11 @@ def api_analyze():
         "scripts": resultado.get("scripts", {}),
         "size_kb": resultado.get("size_kb", 0),
         "psi": resultado.get("psi"),
+        "versiones": resultado.get("versiones", {}),
+        "auditorias_rendimiento": resultado.get("auditorias_rendimiento", []),
+        "seguridad": resultado.get("seguridad", {}),
+        "cobertura_practicas": resultado.get("cobertura_practicas", []),
+        "cobertura_practicas_resumen": resultado.get("cobertura_practicas_resumen", {}),
         "hallazgos": resultado.get("hallazgos", []),
         "recomendaciones": resultado.get("recomendaciones", []),
         "soluciones": soluciones_out,
@@ -692,7 +768,7 @@ def api_lead():
         return jsonify({"error": "Email y URL requeridos"}), 400
     if not _email_valido(email):
         return jsonify({"error": "Email inválido"}), 400
-    if _lead_excede_limite(get_remote_address()):
+    if _lead_excede_limite(_client_ip()):
         return jsonify({"error": "Demasiados envíos por minuto"}), 429
 
     # Guardar lead

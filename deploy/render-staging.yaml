@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: web-analyzer-argon-staging
+    runtime: python
+    branch: codex/argon-staging-20261023
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    autoDeployTrigger: checksPass
+    healthCheckPath: /api/health
+    envVars:
+      - key: ARGON_SECURITY_ENABLED
+        value: "true"
+      - key: TRUST_X_FORWARDED_FOR
+        value: "true"
+      - key: PORT
+        value: "10000"

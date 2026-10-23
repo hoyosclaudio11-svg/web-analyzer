@@ -355,6 +355,20 @@ body {
   padding: 16px;
 }
 
+.advanced-audits { margin-top: 16px; }
+.practice-coverage-card { grid-column: 1 / -1; }
+.audit-method, .audit-limits, .audit-summary { color: var(--text2); font-size: 12px; margin-bottom: 10px; }
+.audit-summary { font-weight: 600; }
+.audit-row, .practice-row { border: 1px solid var(--border); border-radius: 6px; padding: 9px 11px; margin: 8px 0; font-size: 12px; }
+.audit-row-title { display: flex; gap: 12px; justify-content: space-between; margin-bottom: 4px; }
+.audit-row-title span { flex: 0 0 auto; color: var(--text2); }
+.audit-issue { border-left: 3px solid var(--yellow); }
+.audit-pass { border-left: 3px solid var(--green); }
+.audit-not_observed { border-left: 3px solid var(--text3); }
+.practice-row small { display: block; color: var(--text3); margin-top: 4px; }
+.field-metrics { display: flex; flex-wrap: wrap; gap: 7px; color: var(--text2); font-size: 11px; margin-bottom: 10px; }
+.field-metric { border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; }
+
 /* ---- Hallazgos ---- */
 .hallazgo-item {
   padding: 10px 12px;
