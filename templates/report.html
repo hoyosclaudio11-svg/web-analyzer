@@ -23,6 +23,15 @@
   .verde { color: #2ea043; }
   .amarillo { color: #d29922; }
   .rojo { color: #e63946; }
+  .report-section { background: #111; border-radius: 10px; padding: 18px; margin: 20px 0; }
+  .report-section h2 { color: #fff; font-size: 17px; margin: 0 0 12px; }
+  .report-summary { color: #aaa; font-size: 12px; line-height: 1.6; margin: 8px 0 14px; }
+  .report-row { border-left: 3px solid #555; padding: 9px 12px; margin: 8px 0; background: #171717; font-size: 12px; line-height: 1.5; }
+  .report-row.audit-pass { border-color: #2ea043; }
+  .report-row.audit-issue { border-color: #e63946; }
+  .report-row.audit-not_evaluated, .report-row.audit-not_applicable { border-color: #666; }
+  .report-row strong { color: #eee; }
+  .report-row small { display: block; color: #aaa; margin-top: 5px; }
 </style>
 </head>
 <body>
@@ -51,19 +60,74 @@
 {% endfor %}
 
 {% if report.metadata %}
+{% set performance = report.metadata.get("rendimiento", {}) %}
+{% set practice_items = report.metadata.get("cobertura_practicas", []) %}
+{% set practice_summary = report.metadata.get("resumen_cobertura_practicas", {}) %}
+{% if performance.get("puntaje_lighthouse") is not none or performance.get("auditorias") or practice_items %}
+<section class="report-section">
+  <h2>Rendimiento — Lighthouse y experiencia real</h2>
+  {% if performance.get("puntaje_lighthouse") is not none %}
+  <p class="report-summary">Lighthouse móvil: <strong>{{ performance.get("puntaje_lighthouse") }}/10</strong></p>
+  {% endif %}
+  {% set field_url = performance.get("datos_campo_url") or {} %}
+  {% set field_metrics = field_url.get("metricas", {}) %}
+  {% if field_metrics %}
+  <p class="report-summary">Datos de campo de CrUX ({{ field_url.get("nivel", "categoría no informada") }}):
+    {% for key, metric in field_metrics.items() %}
+    {{ key }} p75 {{ metric.get("p75", "—") }} ({{ metric.get("nivel", "sin clasificación") }}){% if not loop.last %} · {% endif %}
+    {% endfor %}
+  </p>
+  {% endif %}
+  {% for audit in performance.get("auditorias", []) %}
+  <div class="report-row audit-{{ audit.get('estado', '') }}">
+    <strong>{{ audit.get("titulo", audit.get("id", "Auditoría")) }}</strong>
+    {% if audit.get("valor") %} · {{ audit.get("valor") }}{% endif %}
+    {% if audit.get("estado") == "issue" and audit.get("descripcion") %}<div>{{ audit.get("descripcion") }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if practice_items %}
+<section class="report-section">
+  <h2>Cobertura de las 20 prácticas de rendimiento</h2>
+  <p class="report-summary">
+    {{ practice_summary.get("medidos_directamente", 0) }}/{{ practice_summary.get("controles_sitio", 0) }} medidas directamente ·
+    {{ practice_summary.get("indicios", 0) }} indicios HTTP ·
+    {{ practice_summary.get("requieren_navegador", 0) }} requieren navegador ·
+    {{ practice_summary.get("requieren_servidor", 0) }} requieren datos del servidor
+  </p>
+  {% for item in practice_items %}
+  <div class="report-row audit-{{ item.get('estado', '') }}">
+    <strong>{{ item.get("id", "") }}. {{ item.get("nombre", "Práctica") }}</strong> · {{ item.get("estado", "sin_evidencia") }}
+    {% if item.get("evidencia") %}<div>{{ item.get("evidencia") }}</div>{% endif %}
+    {% if item.get("requiere") %}<small>{{ item.get("requiere") }}</small>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
 {% set security = report.metadata.get("seguridad", {}) %}
 {% if security.get("enabled") %}
 {% set coverage = security.get("resumen", {}) %}
-<div class="footer" style="margin-top:18px">
-  {{ security.get("metodologia", "Índice Argon de seguridad web") }}:
-  {{ security.get("puntaje", "—") }}/10 &middot;
-  Cobertura {{ coverage.get("evaluados", 0) }}/{{ coverage.get("catalogo_total", 0) }} controles
-  ({{ coverage.get("cobertura_porcentaje", 0) }}%) &middot;
-  {{ coverage.get("aprobados", 0) }} correctos &middot;
-  {{ coverage.get("observaciones", 0) }} observaciones &middot;
-  {{ coverage.get("no_evaluados", 0) }} no evaluados &middot;
-  Catálogo {{ security.get("catalogo_version", "sin versión") }}
-</div>
+<section class="report-section">
+  <h2>{{ security.get("metodologia", "Índice Argon de seguridad web") }}</h2>
+  <p class="report-summary">
+    Puntaje {{ security.get("puntaje", "—") }}/10 ·
+    Cobertura {{ coverage.get("evaluados", 0) }}/{{ coverage.get("catalogo_total", 0) }} controles ({{ coverage.get("cobertura_porcentaje", 0) }}%) ·
+    {{ coverage.get("aprobados", 0) }} correctos · {{ coverage.get("observaciones", 0) }} observaciones ·
+    {{ coverage.get("no_evaluados", 0) }} no evaluados · Catálogo {{ security.get("catalogo_version", "sin versión") }}
+  </p>
+  {% for control in security.get("controles", []) %}
+  <div class="report-row audit-{{ control.get('estado', '') }}">
+    <strong>{{ control.get("titulo", control.get("id", "Control")) }}</strong> · {{ control.get("estado", "no_evaluado") }}
+    {% if control.get("gravedad") %} · {{ control.get("gravedad") }}{% endif %}
+    {% if control.get("evidencia") %}<div>{{ control.get("evidencia") }}</div>{% endif %}
+    {% if control.get("recomendacion") and control.get("estado") in ["issue", "not_evaluated"] %}<small>{{ control.get("recomendacion") }}</small>{% endif %}
+  </div>
+  {% endfor %}
+  {% for limit in security.get("limites", []) %}<p class="report-summary">{{ limit }}</p>{% endfor %}
+</section>
 {% endif %}
 <div class="footer" style="margin-top:18px">
   Motor: {{ report.metadata.get("motor", "versión anterior no registrada") }}

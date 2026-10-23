@@ -93,6 +93,35 @@ class TestAnalyzeEndpoint:
                     "Conversión": (10, []),
                 },
                 "versiones": {"motor": "webanalyzer-engine-test", "perfil_seguridad": None},
+                "psi": {
+                    "performance_score": 8.2,
+                    "lcp": "2.3 s",
+                    "datos_campo_url": {
+                        "nivel": "AVERAGE",
+                        "metricas": {"LARGEST_CONTENTFUL_PAINT_MS": {"p75": 2300, "nivel": "AVERAGE"}},
+                    },
+                },
+                "auditorias_rendimiento": [{
+                    "id": "modern-image-formats",
+                    "titulo": "Usar formatos de imagen modernos",
+                    "estado": "issue",
+                    "descripcion": "Se pueden reducir los bytes transferidos.",
+                    "valor": "Ahorro potencial 20 KiB",
+                }],
+                "cobertura_practicas": [{
+                    "id": 1,
+                    "nombre": "Optimización de imágenes",
+                    "estado": "medido_con_hallazgos",
+                    "evidencia": "Lighthouse detectó formatos mejorables.",
+                    "requiere": "PageSpeed Insights.",
+                }],
+                "cobertura_practicas_resumen": {
+                    "controles_sitio": 19,
+                    "medidos_directamente": 10,
+                    "indicios": 2,
+                    "requieren_navegador": 3,
+                    "requieren_servidor": 4,
+                },
                 "tecnologia": [],
                 "meta": {},
                 "imagenes": {},
@@ -114,6 +143,10 @@ class TestAnalyzeEndpoint:
             assert saved_scorecard["_meta"]["motor"] == "webanalyzer-engine-test"
             assert saved_scorecard["_meta"]["perfil_seguridad"] is None
             assert saved_scorecard["_meta"]["seguridad"]["enabled"] is False
+            assert saved_scorecard["_meta"]["rendimiento"]["puntaje_lighthouse"] == 8.2
+            assert saved_scorecard["_meta"]["rendimiento"]["auditorias"][0]["id"] == "modern-image-formats"
+            assert saved_scorecard["_meta"]["cobertura_practicas"][0]["id"] == 1
+            assert saved_scorecard["_meta"]["resumen_cobertura_practicas"]["medidos_directamente"] == 10
 
     def test_analysis_rate_limit_uses_account_for_authenticated_users(self, client, monkeypatch):
         import app as app_module
@@ -193,6 +226,87 @@ class TestAnalyzeEndpoint:
         assert b"32%" in response.data
         assert b"argon-security-controls-v2" in response.data
         assert "_meta" not in report["scorecard"]
+
+    def test_shared_report_renders_performance_coverage_and_security_evidence(self, client):
+        import app as app_module
+
+        report = {
+            "id": "report456",
+            "url": "https://example.test/",
+            "scorecard": {
+                "_meta": {
+                    "motor": "webanalyzer-engine-2.0.0",
+                    "perfil_seguridad": "argon-security-controls-v2",
+                    "rendimiento": {
+                        "puntaje_lighthouse": 8.2,
+                        "datos_campo_url": {
+                            "nivel": "AVERAGE",
+                            "metricas": {"LARGEST_CONTENTFUL_PAINT_MS": {"p75": 2300, "nivel": "AVERAGE"}},
+                        },
+                        "auditorias": [{
+                            "id": "modern-image-formats",
+                            "titulo": "Usar formatos de imagen modernos",
+                            "estado": "issue",
+                            "descripcion": "Se pueden reducir los bytes transferidos.",
+                            "valor": "Ahorro potencial 20 KiB",
+                        }],
+                    },
+                    "cobertura_practicas": [{
+                        "id": 1,
+                        "nombre": "Optimización de imágenes",
+                        "estado": "medido_con_hallazgos",
+                        "evidencia": "Lighthouse detectó formatos mejorables.",
+                        "requiere": "PageSpeed Insights.",
+                    }],
+                    "resumen_cobertura_practicas": {
+                        "controles_sitio": 19,
+                        "medidos_directamente": 10,
+                        "indicios": 2,
+                        "requieren_navegador": 3,
+                        "requieren_servidor": 4,
+                    },
+                    "seguridad": {
+                        "enabled": True,
+                        "metodologia": "Índice Argon de seguridad web, basado en metodología Argon Defender",
+                        "puntaje": 8.5,
+                        "catalogo_version": "argon-security-controls-v2",
+                        "resumen": {
+                            "evaluados": 7,
+                            "catalogo_total": 22,
+                            "cobertura_porcentaje": 32,
+                            "aprobados": 6,
+                            "observaciones": 1,
+                            "no_evaluados": 12,
+                            "no_aplica": 3,
+                        },
+                        "controles": [{
+                            "id": "header-csp",
+                            "titulo": "Content Security Policy",
+                            "estado": "issue",
+                            "gravedad": "alta",
+                            "evidencia": "No se observó Content-Security-Policy.",
+                            "recomendacion": "Definir una CSP ajustada a los recursos reales.",
+                        }],
+                        "limites": ["Evaluación pasiva de la respuesta y las cabeceras visibles."],
+                    },
+                },
+            },
+            "promedio": 8.8,
+            "created_at": "2026-10-22",
+            "views": 1,
+        }
+        with patch.object(app_module, "get_shared_report", return_value=report):
+            response = client.get("/r/report456")
+
+        assert response.status_code == 200
+        assert b"Lighthouse m\xc3\xb3vil: <strong>8.2/10</strong>" in response.data
+        assert b"LARGEST_CONTENTFUL_PAINT_MS p75 2300" in response.data
+        assert b"Usar formatos de imagen modernos" in response.data
+        assert b"Cobertura de las 20 pr\xc3\xa1cticas de rendimiento" in response.data
+        assert b"Lighthouse detect\xc3\xb3 formatos mejorables." in response.data
+        assert b"Content Security Policy" in response.data
+        assert b"No se observ\xc3\xb3 Content-Security-Policy." in response.data
+        assert b"Definir una CSP ajustada a los recursos reales." in response.data
 
 
 # =============================================================================

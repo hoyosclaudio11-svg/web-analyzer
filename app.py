@@ -508,21 +508,45 @@ def api_analyze():
             k: {"puntaje": s, "color": _color(s), "detalles": d}
             for k, (s, d) in scores.items()
         }
+        psi = resultado.get("psi")
+        if not isinstance(psi, dict):
+            psi = {}
+        security = resultado.get("seguridad")
+        if not isinstance(security, dict):
+            security = {}
+        coverage_items = resultado.get("cobertura_practicas")
+        if not isinstance(coverage_items, list):
+            coverage_items = []
         shared_scorecard["_meta"] = {
             "motor": resultado.get("versiones", {}).get("motor", "unknown"),
             "perfil_seguridad": resultado.get("versiones", {}).get("perfil_seguridad"),
+            "rendimiento": {
+                "puntaje_lighthouse": psi.get("performance_score"),
+                "metricas": {
+                    name: psi.get(name)
+                    for name in ("lcp", "tbt", "cls", "fcp", "speed_index", "inp")
+                    if psi.get(name) is not None
+                },
+                "datos_campo_url": psi.get("datos_campo_url"),
+                "datos_campo_origen": psi.get("datos_campo_origen"),
+                "auditorias": resultado.get("auditorias_rendimiento") or psi.get("auditorias", []),
+            },
+            "cobertura_practicas": coverage_items,
+            "resumen_cobertura_practicas": resultado.get("cobertura_practicas_resumen") or {},
             "seguridad": {
-                "enabled": resultado.get("seguridad", {}).get("enabled") is True,
-                "metodologia": resultado.get("seguridad", {}).get("nombre_metodologia"),
-                "puntaje": resultado.get("seguridad", {}).get("puntaje"),
-                "catalogo_version": resultado.get("seguridad", {}).get("catalogo_version"),
+                "enabled": security.get("enabled") is True,
+                "metodologia": security.get("nombre_metodologia"),
+                "puntaje": security.get("puntaje"),
+                "catalogo_version": security.get("catalogo_version"),
                 "resumen": {
-                    key: resultado.get("seguridad", {}).get("resumen", {}).get(key)
+                    key: security.get("resumen", {}).get(key)
                     for key in (
                         "evaluados", "catalogo_total", "cobertura_porcentaje",
                         "aprobados", "observaciones", "no_evaluados", "no_aplica",
                     )
                 },
+                "controles": security.get("controles", []),
+                "limites": security.get("limites", []),
             },
         }
         create_shared_report(report_hash, url, shared_scorecard, promedio)
